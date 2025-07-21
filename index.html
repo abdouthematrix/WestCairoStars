@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - لوحة المتصدرين</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-auth-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #1e40af;
+            --secondary-color: #3b82f6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .language-toggle {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .language-toggle:hover {
+            background: var(--secondary-color);
+            transform: translateY(-1px);
+        }
+
+        .login-btn {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .login-btn:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+
+        /* Date Filter */
+        .date-filter {
+            background: var(--surface);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+
+        .date-filter select {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        /* Leaderboard Cards */
+        .leaderboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .leaderboard-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: var(--shadow);
+            transition: transform 0.3s ease;
+        }
+
+        .leaderboard-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .leaderboard-item:last-child {
+            border-bottom: none;
+        }
+
+        .rank {
+            font-weight: bold;
+            color: var(--warning-color);
+            min-width: 30px;
+        }
+
+        .name {
+            flex-grow: 1;
+            margin: 0 15px;
+            font-weight: 500;
+        }
+
+        .score {
+            font-weight: bold;
+            color: var(--success-color);
+            background: #f0fdf4;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        .trophy {
+            font-size: 1.2em;
+            margin-left: 10px;
+        }
+
+        /* Login Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: var(--surface);
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .submit-btn {
+            width: 100%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background: var(--secondary-color);
+        }
+
+        /* Dashboard */
+        .dashboard {
+            display: none;
+        }
+
+        .dashboard-header {
+            background: var(--surface);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .team-info {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .logout-btn {
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .team-members {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: var(--shadow);
+        }
+
+        .add-member-btn {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .members-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .members-table th,
+        .members-table td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .members-table th {
+            background: var(--background);
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .score-input {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .edit-btn, .delete-btn, .save-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .edit-btn {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .delete-btn {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .save-btn {
+            background: var(--success-color);
+            color: white;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .leaderboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .members-table {
+                font-size: 12px;
+            }
+
+            .score-input {
+                width: 50px;
+            }
+        }
+
+        /* RTL Support */
+        [dir="rtl"] .header-content {
+            text-align: right;
+        }
+
+        [dir="rtl"] .leaderboard-item {
+            flex-direction: row-reverse;
+        }
+
+        [dir="rtl"] .rank {
+            margin-left: 10px;
+            margin-right: 0;
+        }
+
+        [dir="rtl"] .trophy {
+            margin-right: 10px;
+            margin-left: 0;
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Public Leaderboard -->
+        <div id="leaderboard-view">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-content">
+                    <div class="logo" data-en="Sales Leaderboard" data-ar="لوحة المتصدرين في المبيعات">لوحة المتصدرين في المبيعات</div>
+                    <div class="header-controls">
+                        <button class="language-toggle" onclick="toggleLanguage()">EN</button>
+                        <button class="login-btn" onclick="openLoginModal()" data-en="Login" data-ar="تسجيل الدخول">تسجيل الدخول</button>
+                    </div>
+                </div>
+            </div>
+                       
+            <!-- Leaderboards -->
+            <div class="leaderboard-grid">
+                <!-- Top Achievers -->
+                <div class="leaderboard-card">
+                    <h2 class="card-title" data-en="Top Achievers" data-ar="أفضل المحققين">أفضل المحققين</h2>
+                    <div id="top-achievers">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Teams -->
+                <div class="leaderboard-card">
+                    <h2 class="card-title" data-en="Top Teams" data-ar="أفضل الفرق">أفضل الفرق</h2>
+                    <div id="top-teams">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Team Leaders -->
+                <div class="leaderboard-card">
+                    <h2 class="card-title" data-en="Top Team Leaders" data-ar="أفضل قادة الفرق">أفضل قادة الفرق</h2>
+                    <div id="top-leaders">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeLoginModal()">&times;</span>
+                <h2 data-en="Team Leader Login" data-ar="تسجيل دخول قائد الفريق">تسجيل دخول قائد الفريق</h2>
+                <form id="loginForm" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="teamCode" data-en="Team Code:" data-ar="رمز الفريق:">رمز الفريق:</label>
+                        <input type="text" id="teamCode" name="teamCode" required>
+                    </div>
+                    <button type="submit" class="submit-btn" data-en="Login" data-ar="دخول">دخول</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="dashboard">
+            <div class="dashboard-header">
+                <div class="team-info">
+                    <span data-en="Team:" data-ar="الفريق:">الفريق:</span> <span id="teamName">-</span>
+                </div>
+                <button class="logout-btn" onclick="logout()" data-en="Logout" data-ar="تسجيل الخروج">تسجيل الخروج</button>
+            </div>
+
+            <div class="team-members">
+                <h3 data-en="Team Members Management" data-ar="إدارة أعضاء الفريق">إدارة أعضاء الفريق</h3>
+                <button class="add-member-btn" onclick="addMember()" data-en="Add New Member" data-ar="إضافة عضو جديد">إضافة عضو جديد</button>
+                
+                <table class="members-table">
+                    <thead>
+                        <tr>
+                            <th data-en="Name" data-ar="الاسم">الاسم</th>
+                            <th data-en="Secured Loan" data-ar="قرض مضمون">قرض مضمون</th>
+                            <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان مضمونة">بطاقة ائتمان مضمونة</th>
+                            <th data-en="Unsecured Loan" data-ar="قرض غير مضمون">قرض غير مضمون</th>
+                            <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان غير مضمونة">بطاقة ائتمان غير مضمونة</th>
+                            <th data-en="Bancassurance" data-ar="التأمين المصرفي">التأمين المصرفي</th>
+                            <th data-en="Total" data-ar="المجموع">المجموع</th>
+                            <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="membersTable">
+                        <!-- Dynamic content -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration (Replace with your config)
+        const firebaseConfig = {
+            // Add your Firebase config here
+			 apiKey: "AIzaSyD3WUdT177BGJWjJrrNRsDif7fQTm_GqZ4",
+			 authDomain: "westcairoregion.firebaseapp.com",	
+			 projectId: "westcairoregion",
+			 storageBucket: "westcairoregion.firebasestorage.app",
+			 messagingSenderId: "946920356743",
+			 appId: "1:946920356743:web:71f8bea2b3d261a7b9f122"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // Global Variables
+        let currentLanguage = 'ar';
+        let currentUser = null;
+        let currentTeamCode = null;
+        let teamMembers = [];
+
+        // Products configuration
+        const products = [
+            'securedLoan',
+            'securedCreditCard',
+            'unsecuredLoan',
+            'unsecuredCreditCard',
+            'bancassurance'
+        ];
+
+        // Language Toggle
+        function toggleLanguage() {
+            currentLanguage = currentLanguage === 'ar' ? 'en' : 'ar';
+            const isRTL = currentLanguage === 'ar';
+            
+            document.documentElement.setAttribute('lang', currentLanguage);
+            document.documentElement.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
+            
+            // Update all translatable elements
+            document.querySelectorAll('[data-en][data-ar]').forEach(element => {
+                element.textContent = element.getAttribute(`data-${currentLanguage}`);
+            });
+            
+            // Update language toggle button
+            document.querySelector('.language-toggle').textContent = currentLanguage === 'ar' ? 'EN' : 'ع';
+        }
+
+        // Modal Functions
+        function openLoginModal() {
+            document.getElementById('loginModal').style.display = 'block';
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        // Login Handler
+        async function handleLogin(event) {
+            event.preventDefault();
+            const teamCode = document.getElementById('teamCode').value.trim();
+            
+            try {
+                // Verify team code exists in database
+                const teamDoc = await db.collection('teams').doc(teamCode).get();
+                
+                if (teamDoc.exists) {
+                    currentTeamCode = teamCode;
+                    currentUser = { teamCode }; // simulate login
+                    
+                    // Hide leaderboard, show dashboard
+                    document.getElementById('leaderboard-view').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    document.getElementById('teamName').textContent = teamDoc.data().name || teamCode;
+                    
+                    closeLoginModal();
+                    await loadTeamMembers();
+                } else {
+                    alert(currentLanguage === 'ar' ? 'رمز الفريق غير صحيح' : 'Invalid team code');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert(currentLanguage === 'ar' ? 'خطأ في تسجيل الدخول' : 'Login error');
+            }
+        }
+
+        // Logout
+        function logout() {
+            currentUser = null;
+            currentTeamCode = null;
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('leaderboard-view').style.display = 'block';
+            document.getElementById('teamCode').value = '';
+        }
+
+        // Load Team Members
+        async function loadTeamMembers() {
+            try {
+                const membersSnapshot = await db.collection('teamMembers')
+                    .where('teamCode', '==', currentTeamCode)
+                    .get();
+                
+                teamMembers = [];
+                membersSnapshot.forEach(doc => {
+                    teamMembers.push({ id: doc.id, ...doc.data() });
+                });
+                
+                renderMembersTable();
+            } catch (error) {
+                console.error('Error loading team members:', error);
+            }
+        }
+
+        // Render Members Table
+        function renderMembersTable() {
+            const tbody = document.getElementById('membersTable');
+            tbody.innerHTML = '';
+            
+            teamMembers.forEach(member => {
+                const row = document.createElement('tr');
+                const total = products.reduce((sum, product) => sum + (member.scores?.[product] || 0), 0);
+                
+                row.innerHTML = `
+                    <td>${member.name}</td>
+                    ${products.map(product => `
+                        <td>
+                            <input type="number" 
+                                   class="score-input" 
+                                   value="${member.scores?.[product] || 0}"
+                                   onchange="updateMemberScore('${member.id}', '${product}', this.value)"
+                                   min="0">
+                        </td>
+                    `).join('')}
+                    <td><strong>${total}</strong></td>
+                    <td class="action-btns">
+                        <button class="edit-btn" onclick="editMember('${member.id}')">${currentLanguage === 'ar' ? 'تعديل' : 'Edit'}</button>
+                        <button class="delete-btn" onclick="deleteMember('${member.id}')">${currentLanguage === 'ar' ? 'حذف' : 'Delete'}</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Add Member
+        async function addMember() {
+            const name = prompt(currentLanguage === 'ar' ? 'اسم العضو الجديد:' : 'New member name:');
+            if (!name) return;
+            
+            try {
+                const newMember = {
+                    name: name.trim(),
+                    teamCode: currentTeamCode,// ensure it matches current session
+                    scores: {
+                        securedLoan: 0,
+                        securedCreditCard: 0,
+                        unsecuredLoan: 0,
+                        unsecuredCreditCard: 0,
+                        bancassurance: 0
+                    },
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                const docRef = await db.collection('teamMembers').add(newMember);
+                teamMembers.push({ id: docRef.id, ...newMember });
+                renderMembersTable();
+            } catch (error) {
+                console.error('Error adding member:', error);
+                alert(currentLanguage === 'ar' ? 'خطأ في إضافة العضو' : 'Error adding member');
+            }
+        }
+
+        // Update Member Score
+        async function updateMemberScore(memberId, product, score) {
+            try {
+                const numScore = parseInt(score) || 0;
+                await db.collection('teamMembers').doc(memberId).update({
+                    [`scores.${product}`]: numScore,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Update local data
+                const member = teamMembers.find(m => m.id === memberId);
+                if (member) {
+                    if (!member.scores) member.scores = {};
+                    member.scores[product] = numScore;
+                }
+                
+                renderMembersTable();
+            } catch (error) {
+                console.error('Error updating score:', error);
+            }
+        }
+
+        // Edit Member
+        function editMember(memberId) {
+            const member = teamMembers.find(m => m.id === memberId);
+            if (!member) return;
+            
+            const newName = prompt(
+                currentLanguage === 'ar' ? 'تعديل اسم العضو:' : 'Edit member name:', 
+                member.name
+            );
+            
+            if (newName && newName.trim() !== member.name) {
+                updateMemberName(memberId, newName.trim());
+            }
+        }
+
+        // Update Member Name
+        async function updateMemberName(memberId, name) {
+            try {
+                await db.collection('teamMembers').doc(memberId).update({
+                    name: name,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                const member = teamMembers.find(m => m.id === memberId);
+                if (member) {
+                    member.name = name;
+                }
+                
+                renderMembersTable();
+            } catch (error) {
+                console.error('Error updating member name:', error);
+            }
+        }
+
+        // Delete Member
+        async function deleteMember(memberId) {
+            if (!confirm(currentLanguage === 'ar' ? 'هل أنت متأكد من حذف هذا العضو؟' : 'Are you sure you want to delete this member?')) {
+                return;
+            }
+            
+            try {
+                await db.collection('teamMembers').doc(memberId).delete();
+                teamMembers = teamMembers.filter(m => m.id !== memberId);
+                renderMembersTable();
+            } catch (error) {
+                console.error('Error deleting member:', error);
+            }
+        }
+
+        // Load Leaderboard Data
+        async function loadLeaderboards() {
+            try {
+                await Promise.all([
+                    loadTopAchievers(),
+                    loadTopTeams(),
+                    loadTopTeamLeaders()
+                ]);
+            } catch (error) {
+                console.error('Error loading leaderboards:', error);
+            }
+        }
+
+        // Load Top Achievers
+        async function loadTopAchievers() {
+            try {
+                const snapshot = await db.collection('teamMembers').get();
+                const achievers = [];
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const scores = data.scores || {};
+                    const productsWithScore = products.filter(p => scores[p] > 0).length;
+                    
+                    if (productsWithScore >= 2) {
+                        const totalScore = products.reduce((sum, p) => sum + (scores[p] || 0), 0);
+                        achievers.push({
+                            name: data.name,
+                            score: totalScore
+                        });
+                    }
+                });
+                
+                achievers.sort((a, b) => b.score - a.score);
+                renderLeaderboard('top-achievers', achievers.slice(0, 10));
+            } catch (error) {
+                console.error('Error loading top achievers:', error);
+            }
+        }
+
+        // Load Top Teams
+        async function loadTopTeams() {
+            try {
+                const teamsSnapshot = await db.collection('teams').get();
+                const teams = [];
+                
+                for (const teamDoc of teamsSnapshot.docs) {
+                    const teamData = teamDoc.data();
+                    const membersSnapshot = await db.collection('teamMembers')
+                        .where('teamCode', '==', teamDoc.id)
+                        .get();
+                    
+                    let allMembersActive = true;
+                    let totalScore = 0;
+                    
+                    membersSnapshot.forEach(memberDoc => {
+                        const memberData = memberDoc.data();
+                        const scores = memberData.scores || {};
+                        const memberTotal = products.reduce((sum, p) => sum + (scores[p] || 0), 0);
+                        
+                        if (memberTotal === 0) {
+                            allMembersActive = false;
+                        }
+                        totalScore += memberTotal;
+                    });
+                    
+                    if (allMembersActive && membersSnapshot.size > 0 && teamData.leader) {
+                        teams.push({
+                            name: teamData.leader,
+                            team: teamData.name || teamDoc.id,
+                            score: totalScore
+                        });
+                    }
+                }
+                
+                teams.sort((a, b) => b.score - a.score);
+                renderLeaderboard('top-leaders', teams.slice(0, 10));
+            } catch (error) {
+                console.error('Error loading top team leaders:', error);
+            }
+        }
+
+        // Load Top Team Leaders
+        async function loadTopTeamLeaders() {
+            try {
+                const teamsSnapshot = await db.collection('teams').get();
+                const leaders = [];
+
+                for (const teamDoc of teamsSnapshot.docs) {
+                    const teamData = teamDoc.data();
+                    const membersSnapshot = await db.collection('teamMembers')
+                        .where('teamCode', '==', teamDoc.id)
+                        .get();
+
+                    let allMembersActive = true;
+                    let totalScore = 0;
+
+                    membersSnapshot.forEach(memberDoc => {
+                        const memberData = memberDoc.data();
+                        const scores = memberData.scores || {};
+                        const memberTotal = products.reduce((sum, p) => sum + (scores[p] || 0), 0);
+
+                        if (memberTotal === 0) {
+                            allMembersActive = false;
+                        }
+                        totalScore += memberTotal;
+                    });
+
+                    if (allMembersActive && membersSnapshot.size > 0) {
+                        leaders.push({
+                            name: teamData.name || teamDoc.id,
+                            score: totalScore
+                        });
+                    }
+                }
+
+                leaders.sort((a, b) => b.score - a.score);
+                renderLeaderboard('top-teams', leaders.slice(0, 10));
+            } catch (error) {
+                console.error('Error loading top teams:', error);
+            }
+        }
+
+        // Render Leaderboard
+        function renderLeaderboard(containerId, data) {
+            const container = document.getElementById(containerId);
+            
+            if (data.length === 0) {
+                container.innerHTML = `<p style="text-align: center; color: var(--text-secondary); padding: 20px;">${
+                    currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data available'
+                }</p>`;
+                return;
+            }
+            
+            container.innerHTML = data.map((item, index) => {
+                const trophy = index === 0 ? '🏆' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `
+                    <div class="leaderboard-item">
+                        <span class="rank">#${index + 1}</span>
+                        <span class="name">${item.name}${item.team ? ` (${item.team})` : ''}</span>
+                        <span class="score">${item.score} <span class="trophy">${trophy}</span></span>
+                    </div>
+                `;
+            }).join('');
+        }
+                               
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('loginModal');
+            if (event.target === modal) {
+                closeLoginModal();
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial language
+            toggleLanguage();
+            toggleLanguage(); // Call twice to set to Arabic by default
+            
+            loadLeaderboards();
+            
+            // Set up real-time listeners for leaderboard updates
+            setInterval(loadLeaderboards, 30000); // Refresh every 30 seconds
+        });
+
+        // Admin Functions (for future implementation)
+        const AdminFunctions = {
+            // Review and update all team scores
+            async reviewTeamScores() {
+                try {
+                    const teamsSnapshot = await db.collection('teams').get();
+                    const reviewData = [];
+                    
+                    for (const teamDoc of teamsSnapshot.docs) {
+                        const membersSnapshot = await db.collection('teamMembers')
+                            .where('teamCode', '==', teamDoc.id)
+                            .get();
+                        
+                        const teamData = {
+                            teamId: teamDoc.id,
+                            teamName: teamDoc.data().name,
+                            members: []
+                        };
+                        
+                        membersSnapshot.forEach(memberDoc => {
+                            const memberData = memberDoc.data();
+                            teamData.members.push({
+                                id: memberDoc.id,
+                                name: memberData.name,
+                                scores: memberData.scores || {}
+                            });
+                        });
+                        
+                        reviewData.push(teamData);
+                    }
+                    
+                    return reviewData;
+                } catch (error) {
+                    console.error('Error reviewing team scores:', error);
+                    throw error;
+                }
+            },
+            
+            // Update achieved scores
+            async updateAchievedScore(memberId, product, achievedScore) {
+                try {
+                    await db.collection('teamMembers').doc(memberId).update({
+                        [`achievedScores.${product}`]: achievedScore,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (error) {
+                    console.error('Error updating achieved score:', error);
+                    throw error;
+                }
+            },
+            
+            // Get daily leaderboard
+            async getDailyLeaderboard(date) {
+                try {
+                    const startDate = new Date(date);
+                    startDate.setHours(0, 0, 0, 0);
+                    const endDate = new Date(date);
+                    endDate.setHours(23, 59, 59, 999);
+                    
+                    const snapshot = await db.collection('dailyScores')
+                        .where('date', '>=', startDate)
+                        .where('date', '<=', endDate)
+                        .get();
+                    
+                    const leaderboard = [];
+                    snapshot.forEach(doc => {
+                        leaderboard.push(doc.data());
+                    });
+                    
+                    return leaderboard.sort((a, b) => b.totalScore - a.totalScore);
+                } catch (error) {
+                    console.error('Error getting daily leaderboard:', error);
+                    throw error;
+                }
+            }
+        };
+
+        // Export admin functions for console access
+        window.AdminFunctions = AdminFunctions;
+    </script>
+</body>
+</html>
