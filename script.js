@@ -1,5 +1,4 @@
 
-    <script>
         // Firebase Configuration (Replace with your config)
         const firebaseConfig = {
             // Add your Firebase config here
@@ -487,4 +486,3 @@
 
         // Export admin functions for console access
         window.AdminFunctions = AdminFunctions;
-    </script>
