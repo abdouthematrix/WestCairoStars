@@ -1,0 +1,34 @@
+<div id="dashboard" class="dashboard">
+    <div class="dashboard-header">
+        <div class="team-info">
+            <span data-en="Team:" data-ar="الفريق:">الفريق:</span> <span id="teamName">-</span>
+        </div>
+        <div class="dashboard-controls">
+            <button class="language-toggle" onclick="toggleLanguage()">EN</button>
+            <button class="logout-btn" onclick="logout()" data-en="Logout" data-ar="تسجيل الخروج">تسجيل الخروج</button>
+        </div>
+    </div>
+
+    <div class="team-members">
+        <h3 data-en="Team Members Management" data-ar="إدارة أعضاء الفريق">إدارة أعضاء الفريق</h3>
+        <button class="add-member-btn" onclick="addMember()" data-en="Add New Member" data-ar="إضافة عضو جديد">إضافة عضو جديد</button>
+        
+        <table class="members-table">
+            <thead>
+                <tr>
+                    <th data-en="Name" data-ar="الاسم">الاسم</th>
+                    <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
+                    <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
+                    <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
+                    <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضمانة">بطاقة ائتمان بدون ضمانة</th>
+                    <th data-en="Bancassurance" data-ar="التأمين البنكي">التأمين البنكي</th>
+                    <th data-en="Total" data-ar="المجموع">المجموع</th>
+                    <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody id="membersTable">
+                <!-- Dynamic content -->
+            </tbody>
+        </table>
+    </div>
+</div> 

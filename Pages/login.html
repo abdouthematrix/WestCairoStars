@@ -1,0 +1,13 @@
+<div id="loginModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="showLeaderboard()">&times;</span>
+        <h2 data-en="Team Leader Login" data-ar="تسجيل دخول قائد الفريق">تسجيل دخول قائد الفريق</h2>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="teamCode" data-en="Team Code:" data-ar="رمز الفريق:">رمز الفريق:</label>
+                <input type="text" id="teamCode" name="teamCode" required>
+            </div>
+            <button type="submit" class="submit-btn" data-en="Login" data-ar="دخول">دخول</button>
+        </form>
+    </div>
+</div> 

@@ -3,109 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaderboard - لوحة المتصدرين</title>
+    <title>West Cairo Stars ⭐ نجوم غرب القاهرة</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-auth-compat.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
-    <script src="script.js"></script>
     <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-    <div class="container">
-        <!-- Public Leaderboard -->
-        <div id="leaderboard-view">
-            <!-- Header -->
-            <div class="header">
-                <div class="header-content">
-                    <div class="logo" data-en="Sales Leaderboard" data-ar="لوحة المتصدرين في المبيعات">لوحة المتصدرين في المبيعات</div>
-                    <div class="header-controls">
-                        <button class="language-toggle" onclick="toggleLanguage()">EN</button>
-                        <button class="login-btn" onclick="openLoginModal()" data-en="Login" data-ar="تسجيل الدخول">تسجيل الدخول</button>
-                    </div>
-                </div>
-            </div>
-                       
-            <!-- Leaderboards -->
-            <div class="leaderboard-grid">
-                <!-- Top Achievers -->
-                <div class="leaderboard-card">
-                    <h2 class="card-title" data-en="Top Achievers" data-ar="أفضل المحققين">أفضل المحققين</h2>
-                    <div id="top-achievers">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Top Teams -->
-                <div class="leaderboard-card">
-                    <h2 class="card-title" data-en="Top Teams" data-ar="أفضل الفرق">أفضل الفرق</h2>
-                    <div id="top-teams">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Top Team Leaders -->
-                <div class="leaderboard-card">
-                    <h2 class="card-title" data-en="Top Team Leaders" data-ar="أفضل قادة الفرق">أفضل قادة الفرق</h2>
-                    <div id="top-leaders">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Login Modal -->
-        <div id="loginModal" class="modal">
-            <div class="modal-content">
-                <span class="close" onclick="closeLoginModal()">&times;</span>
-                <h2 data-en="Team Leader Login" data-ar="تسجيل دخول قائد الفريق">تسجيل دخول قائد الفريق</h2>
-                <form id="loginForm" onsubmit="handleLogin(event)">
-                    <div class="form-group">
-                        <label for="teamCode" data-en="Team Code:" data-ar="رمز الفريق:">رمز الفريق:</label>
-                        <input type="text" id="teamCode" name="teamCode" required>
-                    </div>
-                    <button type="submit" class="submit-btn" data-en="Login" data-ar="دخول">دخول</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Dashboard -->
-        <div id="dashboard" class="dashboard">
-            <div class="dashboard-header">
-                <div class="team-info">
-                    <span data-en="Team:" data-ar="الفريق:">الفريق:</span> <span id="teamName">-</span>
-                </div>
-                <button class="logout-btn" onclick="logout()" data-en="Logout" data-ar="تسجيل الخروج">تسجيل الخروج</button>
-            </div>
-
-            <div class="team-members">
-                <h3 data-en="Team Members Management" data-ar="إدارة أعضاء الفريق">إدارة أعضاء الفريق</h3>
-                <button class="add-member-btn" onclick="addMember()" data-en="Add New Member" data-ar="إضافة عضو جديد">إضافة عضو جديد</button>
-                
-                <table class="members-table">
-                    <thead>
-                        <tr>
-                            <th data-en="Name" data-ar="الاسم">الاسم</th>
-                            <th data-en="Secured Loan" data-ar="قرض مضمون">قرض مضمون</th>
-                            <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان مضمونة">بطاقة ائتمان مضمونة</th>
-                            <th data-en="Unsecured Loan" data-ar="قرض غير مضمون">قرض غير مضمون</th>
-                            <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان غير مضمونة">بطاقة ائتمان غير مضمونة</th>
-                            <th data-en="Bancassurance" data-ar="التأمين المصرفي">التأمين المصرفي</th>
-                            <th data-en="Total" data-ar="المجموع">المجموع</th>
-                            <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="membersTable">
-                        <!-- Dynamic content -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<body>   
+    <div class="container">       
+        <div id="app"></div>
     </div>
+    <script src="script.js"></script>
 </body>
 </html>

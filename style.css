@@ -179,8 +179,7 @@
         }
 
         /* Login Modal */
-        .modal {
-            display: none;
+        .modal {            
             position: fixed;
             z-index: 1000;
             left: 0;
@@ -254,11 +253,7 @@
             background: var(--secondary-color);
         }
 
-        /* Dashboard */
-        .dashboard {
-            display: none;
-        }
-
+        /* Dashboard Header Improved Layout */
         .dashboard-header {
             background: var(--surface);
             padding: 20px;
@@ -268,12 +263,20 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
         }
 
-        .team-info {
+        .dashboard-header .team-info {
             font-size: 1.2rem;
             font-weight: bold;
             color: var(--primary-color);
+        }
+
+        .dashboard-header .dashboard-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
 
         .logout-btn {
@@ -359,6 +362,58 @@
         .save-btn {
             background: var(--success-color);
             color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            margin: 0 2px;
+            transition: background 0.2s;
+        }
+        .save-btn:hover {
+            background: #059669;
+        }
+
+        .admin-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .admin-btn:hover {
+            background: var(--secondary-color);
+            transform: translateY(-1px);
+        }
+        .admin-section {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+        .admin-team-review {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f3f4f6;
+            border-radius: 8px;
+        }
+        .review-btn {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .review-btn:hover {
+            background: #059669;
         }
 
         /* Responsive */
@@ -378,10 +433,24 @@
 
             .members-table {
                 font-size: 12px;
+                overflow-x: auto;
+                display: block;
             }
 
             .score-input {
                 width: 50px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .dashboard-header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+                gap: 10px;
+            }
+            .dashboard-header .dashboard-controls {
+                justify-content: center;
             }
         }
 
@@ -425,3 +494,216 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+/* Admin UI Modernization */
+.admin-section {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: var(--shadow);
+    margin-bottom: 30px;
+}
+
+.members-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+    overflow-x: auto;
+    display: block;
+}
+.members-table th, .members-table td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 10px;
+    text-align: center;
+}
+.members-table th {
+    background: #f3f4f6;
+}
+
+.save-btn {
+    background: var(--success-color);
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    margin: 0 2px;
+    transition: background 0.2s;
+}
+.save-btn:hover {
+    background: #059669;
+}
+
+tr[style*='background: #d1fae5'] {
+    transition: background 0.5s;
+}
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.team-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.team-info h3 {
+    color: var(--primary-color, #2563eb);
+    margin-bottom: 0.5rem;
+}
+
+.team-code {
+    font-family: monospace;
+    background: #e2e8f0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.team-leader {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+.team-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.members-section {
+    margin-top: 1rem;
+}
+
+.members-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+    .members-header h4 {
+        color: #374151;
+    }
+
+.btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+}
+
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+
+
+
+.admin-team-section {
+    border: 2px solid #fbbf24;
+    background: #fefbf2;
+}
+
+.admin-badge {
+    background: #f59e0b;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-left: 0.5rem;
+}
+
+.admin-team-row {
+    background: #fefbf2 !important;
+}
+
+    .admin-team-row input:disabled {
+        background: #f3f4f6;
+        color: #6b7280;
+        cursor: not-allowed;
+    }
+
+.admin-protected {
+    color: #f59e0b;
+    font-weight: bold;
+    font-size: 0.875rem;
+}
+
+.admin-protected-text {
+    color: #f59e0b;
+    font-weight: bold;
+    padding: 0.5rem 1rem;
+    background: #fef3c7;
+    border-radius: 4px;
+    border: 1px solid #fbbf24;
+}
+
+.no-members {
+    text-align: center;
+    color: #6b7280;
+    font-style: italic;
+    padding: 1rem;
+}
+
+.reviewed-score {
+    font-size: 0.75rem;
+    color: #059669;
+    font-weight: 500;
+    background: #d1fae5;
+    padding: 1px 4px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-top: 2px;
+}
+
+.score-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.leaderboard-item .score {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.score-type-indicator {
+    font-size: 0.7em;
+    opacity: 0.7;
+    font-style: italic;
+}
