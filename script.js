@@ -112,10 +112,13 @@ async function addMember() {
     const name = prompt(currentLanguage === 'ar' ? 'اسم العضو الجديد:' : 'New member name:');
     if (!name) return;
 
+    const cleanedName = name.trim().toLowerCase().replace(/\s+/g, '_');
+    const memberId = `${currentTeamCode}_${cleanedName}`;
+
     try {
         const newMember = {
             name: name.trim(),
-            teamCode: currentTeamCode, // ensure it matches current session
+            teamCode: currentTeamCode,
             scores: {
                 securedLoan: 0,
                 securedCreditCard: 0,
@@ -126,9 +129,10 @@ async function addMember() {
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await db.collection('teamMembers').add(newMember);
+        await db.collection('teamMembers').doc(memberId).set(newMember);
+
         teamMembers.push({
-            id: docRef.id,
+            id: memberId,
             ...newMember
         });
         renderMembersTable();
