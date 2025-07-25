@@ -4,8 +4,10 @@
         <h2 data-en="Team Leader Login" data-ar="تسجيل دخول قائد الفريق">تسجيل دخول قائد الفريق</h2>
         <form id="loginForm" onsubmit="handleLogin(event)">
             <div class="form-group">
-                <label for="teamCode" data-en="Team Code:" data-ar="رمز الفريق:">رمز الفريق:</label>
-                <input type="text" id="teamCode" name="teamCode" required>
+                <label for="userName" data-en="Team User Name:" data-ar="رمز دخول الفريق:">رمز دخول الفريق:</label>
+                <input type="text" id="userName" name="userName" required>
+                <label for="userPassword" data-en="Team User Password:" data-ar="الرقم السري للفريق:">الرقم السري للفريق:</label>
+                <input type="password" id="userPassword" name="userPassword" required>
             </div>
             <button type="submit" class="submit-btn" data-en="Login" data-ar="دخول">دخول</button>
         </form>
