@@ -281,19 +281,98 @@ window.appUtils = {
     showLoadingIndicator,
     hideLoadingIndicator,
     showErrorMessage,
-    toggleLanguage
+    toggleLanguage,
+    // Add new helper function to get today's date in YYYY-MM-DD format
+    getTodayString() {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    },
+    async saveDailyScores(memberId, TeamCode, date, product, numScore) {
+        const { db } = window.appUtils;
+        try {
+            const docRef = db
+                .collection('scores')
+                .doc(date)
+                .collection(TeamCode)
+                .doc(memberId);
+            // Update or create today's score document
+            await db.collection('scores')                // Root: "scores"
+                .doc(date)                              // Document: today's date (e.g., "2025-07-26")
+                .collection(TeamCode)             // Subcollection: team code (e.g., "Team123")
+                .doc(memberId)                           // Document: member ID (e.g., "johnDoe")
+                .set({
+                    scores: {
+                        [product]: numScore              // Dynamically set e.g. "securedLoan": 12
+                    },
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });                     // Merge to preserve existing scores
+        } catch (error) {
+            console.error('Error saving daily scores:', error);
+            return null;
+        }
+    },
+    async saveDailyreviewedScores(memberId, TeamCode, date, product, numScore) {
+        const { db } = window.appUtils;
+        try {
+            const docRef = db
+                .collection('scores')
+                .doc(date)
+                .collection(TeamCode)
+                .doc(memberId);
+            // Update or create today's score document
+            await db.collection('scores')                // Root: "scores"
+                .doc(date)                              // Document: today's date (e.g., "2025-07-26")
+                .collection(TeamCode)             // Subcollection: team code (e.g., "Team123")
+                .doc(memberId)                           // Document: member ID (e.g., "johnDoe")
+                .set({
+                    reviewedScores: {
+                        [product]: numScore              // Dynamically set e.g. "securedLoan": 12
+                    },
+                    reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });                     // Merge to preserve existing scores
+        } catch (error) {
+            console.error('Error saving daily reviewed scores:', error);
+            return null;
+        }
+    },
+    // Add new method to load daily scores
+    async loadDailyScores(memberId, TeamCode, date) {
+        const { db } = window.appUtils;       
+        try {
+            if (!memberId || !TeamCode || !date)
+                return {};
+            const docRef = db
+                .collection('scores')
+                .doc(date)
+                .collection(TeamCode)
+                .doc(memberId);
+
+            const snapshot = await docRef.get();
+
+            if (!snapshot.exists) return null;
+
+            const data = snapshot.data();
+            return {
+                scores: data?.scores || {},
+                reviewedScores: data?.reviewedScores || {}
+            };
+        } catch (error) {
+            console.error('Error loading daily scores:', error);
+            return null;
+        }
+    }
 };
 
 // Helper functions for score calculations (used by multiple modules)
 window.scoreUtils = {
-    getEffectiveScores: (memberData) => {
-        const reviewedScores = memberData.reviewedScores || {};
-        const regularScores = memberData.scores || {};
+    getEffectiveScores(memberData) {
+        const reviewedScores = memberData?.reviewedScores || {};
+        const regularScores = memberData?.scores || {};
         const hasReviewedScores = Object.values(reviewedScores).some(score => score > 0);
         return hasReviewedScores ? reviewedScores : regularScores;
     },
 
-    calculateTotalScore: (memberData) => {
+    calculateTotalScore(memberData) {
         const effectiveScores = window.scoreUtils.getEffectiveScores(memberData);
         return products.reduce((sum, product) => sum + (effectiveScores[product] || 0), 0);
     }

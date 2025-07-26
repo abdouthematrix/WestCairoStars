@@ -1,6 +1,6 @@
 ﻿//==========================Admin Module==================================//
 
-const AdminModule = {
+const AdminModule = {    
     // Load all teams for admin management
     async loadAllTeamsForAdmin() {
         const container = document.getElementById('admin-teams-container');
@@ -37,6 +37,10 @@ const AdminModule = {
                 const membersSnapshot = await db.collection('teamMembers')
                     .where('teamCode', '==', teamId)
                     .get();
+
+                const memberRows = await Promise.all(
+                    membersSnapshot.docs.map(memberDoc => this.renderEnhancedAdminMemberRow(teamId, memberDoc, isAdminTeam))
+                );
 
                 return `
                     <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''}">
@@ -81,7 +85,7 @@ const AdminModule = {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${membersSnapshot.docs.map(memberDoc => this.renderEnhancedAdminMemberRow(memberDoc, isAdminTeam)).join('')}
+                                    ${memberRows.join('')}
                                     ${isAdminTeam && membersSnapshot.docs.length === 0 ? `
                                         <tr><td colspan="${products.length + 3}" class="no-members" data-en="Admin team - No members required" data-ar="فريق الإدارة - لا يتطلب أعضاء">فريق الإدارة - لا يتطلب أعضاء</td></tr>
                                     ` : ''}
@@ -116,11 +120,12 @@ const AdminModule = {
     },
 
     // Render enhanced admin member row
-    renderEnhancedAdminMemberRow(memberDoc, isAdminTeam = false) {
+    async renderEnhancedAdminMemberRow(teamId, memberDoc, isAdminTeam = false) {
         const member = memberDoc.data();
         const memberId = memberDoc.id;
-        const reviewed = member.reviewedScores || {};
-        const scores = member.scores || {};
+        const dailyScores = await window.appUtils.loadDailyScores(memberId, teamId, window.appUtils.getTodayString());
+        const reviewed = dailyScores?.reviewedScores || {};
+        const scores = dailyScores?.scores || {};
         const { products } = window.appUtils;
         const currentLanguage = window.appUtils.currentLanguage();
 
@@ -137,7 +142,7 @@ const AdminModule = {
                                value="${reviewed[product] || ''}" 
                                id="reviewed-${memberId}-${product}"
                                ${isAdminTeam ? 'disabled' : ''}
-                               onchange="autoSaveScore('${memberId}', '${product}', this.value)">
+                               onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)">
                                <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">${scores[product] || '0'}</div>   
                     </td>
                 `).join('')}
@@ -363,16 +368,13 @@ const AdminModule = {
     },
 
     // Auto-save score function
-    async autoSaveScore(memberId, product, score) {
+    async autoSaveScore(teamId, memberId, product, score) {
         const { db, products } = window.appUtils;
 
         try {
             const numScore = parseInt(score) || 0;
-            const updateData = {};
-            updateData[`reviewedScores.${product}`] = numScore;
-            updateData.reviewedAt = firebase.firestore.FieldValue.serverTimestamp();
 
-            await db.collection('teamMembers').doc(memberId).update(updateData);
+            await window.appUtils.saveDailyreviewedScores(memberId, teamId, window.appUtils.getTodayString(), product, numScore);   
 
             // Update total in the row
             const row = document.getElementById(`admin-member-row-${memberId}`);

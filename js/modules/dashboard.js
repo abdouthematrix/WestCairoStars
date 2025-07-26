@@ -1,6 +1,6 @@
 ﻿//==========================Dashboard Module==================================//
 
-const DashboardModule = {
+const DashboardModule = {   
     // Load Team Members
     async loadTeamMembers(currentTeamCode, teamMembers) {
         const { db } = window.appUtils;
@@ -31,7 +31,7 @@ const DashboardModule = {
     },
 
     // Render Members Table with both scores and reviewed scores
-    renderMembersTable() {
+    async renderMembersTable() {
         const tbody = document.getElementById('membersTable');
         if (!tbody) return;
 
@@ -40,12 +40,19 @@ const DashboardModule = {
         const { products } = window.appUtils;
         tbody.innerHTML = '';
 
+        // Load all daily scores first
+        const dailyScores = {};
+        for (const member of teamMembers) {
+            dailyScores[member.id] = await window.appUtils.loadDailyScores(member.id, window.appUtils.currentTeamCode(), window.appUtils.getTodayString());
+        }
+
         teamMembers.forEach(member => {
+            const data = dailyScores[member.id];
             const row = document.createElement('tr');
-            const regularScores = member.scores || {};
-            const reviewedScores = member.reviewedScores || {};
-            const effectiveScores = window.scoreUtils.getEffectiveScores(member);
-            const total = window.scoreUtils.calculateTotalScore(member);
+            const regularScores = data?.scores || {};
+            const reviewedScores = data?.reviewedScores || {};
+            const effectiveScores = data ? window.scoreUtils.getEffectiveScores(data) : {};
+            const total = data ? window.scoreUtils.calculateTotalScore(data) : 0;
 
             // Check if reviewed scores exist
             const hasReviewedScores = Object.values(reviewedScores).some(score => score > 0);
@@ -170,16 +177,12 @@ const DashboardModule = {
     },
 
     // Update Member Score
-    async updateMemberScore(memberId, product, score) {
-        const { db } = window.appUtils;
-
+    async updateMemberScore(memberId, product, score) {       
         try {
             const numScore = parseInt(score) || 0;
-            await db.collection('teamMembers').doc(memberId).update({
-                [`scores.${product}`]: numScore,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
 
+            await window.appUtils.saveDailyScores(memberId, window.appUtils.currentTeamCode(), window.appUtils.getTodayString(), product, numScore);   
+           
             // Update local data
             const teamMembers = window.appUtils.teamMembers();
             const member = teamMembers.find(m => m.id === memberId);

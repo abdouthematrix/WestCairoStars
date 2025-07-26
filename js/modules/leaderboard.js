@@ -25,22 +25,27 @@ const LeaderboardModule = {
 
         try {
             const snapshot = await db.collection('teamMembers').get();
-            const achievers = [];
-
-            snapshot.forEach(doc => {
+           
+            const achieverPromises = snapshot.docs.map(async (doc) => {
                 const data = doc.data();
-                const effectiveScores = window.scoreUtils.getEffectiveScores(data);
+                const teamId = data.teamCode;
+                const memberId = doc.id;
+                const dailyScores = await window.appUtils.loadDailyScores(memberId, teamId, window.appUtils.getTodayString());
+                const effectiveScores = window.scoreUtils.getEffectiveScores(dailyScores);
                 const productsWithScore = products.filter(p => effectiveScores[p] > 0).length;
 
                 if (productsWithScore >= 2) {
-                    const totalScore = window.scoreUtils.calculateTotalScore(data);
-                    achievers.push({
+                    const totalScore = window.scoreUtils.calculateTotalScore(dailyScores);
+                    return {
                         name: data.name,
                         score: totalScore,
                         teamCode: data.teamCode
-                    });
+                    };
                 }
+                return null;
             });
+
+            const achievers = (await Promise.all(achieverPromises)).filter(Boolean);
 
             achievers.sort((a, b) => b.score - a.score);
             this.renderLeaderboard('top-achievers', achievers.slice(0, 10));
@@ -59,6 +64,7 @@ const LeaderboardModule = {
 
             for (const teamDoc of teamsSnapshot.docs) {
                 const teamData = teamDoc.data();
+                const teamId = teamDoc.id;
 
                 // Skip admin teams from leaderboard
                 if (teamData.isAdmin) continue;
@@ -67,18 +73,24 @@ const LeaderboardModule = {
                     .where('teamCode', '==', teamDoc.id)
                     .get();
 
+                const memberPromises = membersSnapshot.docs.map(async memberDoc => {
+                    const memberData = memberDoc.data();
+                    const memberId = memberDoc.id;
+                    const dailyScores = await window.appUtils.loadDailyScores(memberId, teamId, window.appUtils.getTodayString());
+                    const memberTotal = await window.scoreUtils.calculateTotalScore(dailyScores);
+                    return { memberTotal };
+                });
+
+                const results = await Promise.all(memberPromises);
                 let allMembersActive = true;
                 let totalScore = 0;
 
-                membersSnapshot.forEach(memberDoc => {
-                    const memberData = memberDoc.data();
-                    const memberTotal = window.scoreUtils.calculateTotalScore(memberData);
-
+                for (const { memberTotal } of results) {
                     if (memberTotal === 0) {
                         allMembersActive = false;
                     }
                     totalScore += memberTotal;
-                });
+                }
 
                 if (allMembersActive && membersSnapshot.size > 0 && teamData.leader) {
                     teams.push({
@@ -106,6 +118,7 @@ const LeaderboardModule = {
 
             for (const teamDoc of teamsSnapshot.docs) {
                 const teamData = teamDoc.data();
+                const teamId = teamDoc.id;
 
                 // Skip admin teams from leaderboard
                 if (teamData.isAdmin) continue;
@@ -114,18 +127,24 @@ const LeaderboardModule = {
                     .where('teamCode', '==', teamDoc.id)
                     .get();
 
+                const memberPromises = membersSnapshot.docs.map(async memberDoc => {
+                    const memberData = memberDoc.data();
+                    const memberId = memberDoc.id;
+                    const dailyScores = await window.appUtils.loadDailyScores(memberId, teamId, window.appUtils.getTodayString());
+                    const memberTotal = window.scoreUtils.calculateTotalScore(dailyScores);
+                    return memberTotal;
+                });
+
+                const memberTotals = await Promise.all(memberPromises);
                 let allMembersActive = true;
                 let totalScore = 0;
 
-                membersSnapshot.forEach(memberDoc => {
-                    const memberData = memberDoc.data();
-                    const memberTotal = window.scoreUtils.calculateTotalScore(memberData);
-
+                for (const memberTotal of memberTotals) {
                     if (memberTotal === 0) {
                         allMembersActive = false;
                     }
                     totalScore += memberTotal;
-                });
+                }
 
                 if (allMembersActive && membersSnapshot.size > 0) {
                     leaders.push({
