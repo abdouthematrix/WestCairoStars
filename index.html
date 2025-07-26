@@ -3,16 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="appicon.svg">
     <title>West Cairo Stars ⭐ نجوم غرب القاهرة</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-auth-compat.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
-    <link rel="stylesheet" href="style.css" />
+
+    <!-- CSS Styles -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Firebase CDN -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- Preload critical modules for better performance -->
+    <link rel="modulepreload" href="js/modules/utils.js">
+    <link rel="modulepreload" href="js/modules/leaderboard.js">
 </head>
-<body>   
-    <div class="container">       
-        <div id="app"></div>
-    </div>
-    <script src="script.js"></script>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1 data-en="West Cairo Region" data-ar="منطقة غرب القاهرة">منطقة غرب القاهرة</h1>
+                <p data-en="West Cairo Stars ⭐" data-ar="نجوم غرب القاهرة ⭐">نجوم غرب القاهرة ⭐</p>
+            </div>
+            <div class="header-actions">
+                <button class="language-toggle" onclick="toggleLanguage()">EN</button>
+                <button class="login-btn" onclick="showLogin()" data-en="Login" data-ar="تسجيل الدخول">تسجيل الدخول</button>
+                <button class="logout-btn" onclick="logout()" style="display: none;" data-en="Logout" data-ar="خروج">خروج</button>
+            </div>
+        </div>
+    </header>
+    <!-- Main App Container -->
+    <main id="app" class="main-content">
+        <!-- Content will be loaded dynamically -->
+        <div class="loading-placeholder">
+            <div class="spinner"></div>
+            <p data-en="Loading..." data-ar="جاري التحميل...">جاري التحميل...</p>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p data-en="© 2025 West Cairo Region. All rights reserved." data-ar="© 2025 منطقة غرب القاهرة. جميع الحقوق محفوظة.">© 2025 منطقة غرب القاهرة. جميع الحقوق محفوظة.</p>
+            <!--<div class="footer-actions">
+                <button onclick="window.dataUtils.exportCollection('teams')" class="btn-small" data-en="Export Teams" data-ar="تصدير الفرق">تصدير الفرق</button>
+                <button onclick="window.dataUtils.exportCollection('teamMembers')" class="btn-small" data-en="Export Members" data-ar="تصدير الأعضاء">تصدير الأعضاء</button>
+                <button onclick="window.dataUtils.importCollection()" class="btn-small" data-en="Import Data" data-ar="استيراد البيانات">استيراد البيانات</button>
+            </div>-->
+        </div>
+    </footer>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Main App Script -->
+    <script src="js/app.js"></script>
+
+    <!-- Service Worker for Caching (Optional) -->
+    <!--<script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('js/sw.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+    </script>-->
 </body>
 </html>
