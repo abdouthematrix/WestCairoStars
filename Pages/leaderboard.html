@@ -1,5 +1,5 @@
 <div id="leaderboard-view">
-    <!-- Static Date Filters -->
+    <!-- Date Filters -->
     <div id="date-filters-container" class="date-filters-container">
         <div class="date-filters-header">
             <h3 data-en="Filter by Date" data-ar="تصفية حسب التاريخ">تصفية حسب التاريخ</h3>
@@ -68,9 +68,7 @@
         <div class="leaderboard-card">
             <h2 class="card-title" data-en="Top Stars ⭐" data-ar="⭐ نجوم غرب القاهرة">⭐ نجوم غرب القاهرة</h2>
             <div id="top-achievers">
-                <div class="loading">
-                    <div class="spinner"></div>
-                </div>
+                <div class="loading"><div class="spinner"></div></div>
             </div>
         </div>
 
@@ -78,9 +76,7 @@
         <div class="leaderboard-card">
             <h2 class="card-title" data-en="Top Teams" data-ar="أفضل الفرق">أفضل الفرق</h2>
             <div id="top-teams">
-                <div class="loading">
-                    <div class="spinner"></div>
-                </div>
+                <div class="loading"><div class="spinner"></div></div>
             </div>
         </div>
 
@@ -88,10 +84,16 @@
         <div class="leaderboard-card">
             <h2 class="card-title" data-en="Top Team Leaders" data-ar="أفضل قادة الفرق">أفضل قادة الفرق</h2>
             <div id="top-leaders">
-                <div class="loading">
-                    <div class="spinner"></div>
-                </div>
+                <div class="loading"><div class="spinner"></div></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Teams with Zero-Score Members -->
+    <div class="leaderboard-card zero-score-card">
+        <h2 class="card-title" data-en="Zero-Score Members" data-ar="أعضاء بدون انتاجية">أعضاء بدون انتاجية</h2>
+        <div id="teams-with-zero-scores">
+            <div class="loading"><div class="spinner"></div></div>
         </div>
     </div>
 </div>

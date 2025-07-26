@@ -191,7 +191,8 @@ const LeaderboardModule = {
             await Promise.all([
                 this.loadTopAchievers(),
                 this.loadTopTeams(),
-                this.loadTopTeamLeaders()
+                this.loadTopTeamLeaders(),
+                this.loadTeamsWithZeroScores()
             ]);
         } catch (error) {
             console.error('Error loading leaderboards:', error);
@@ -402,8 +403,7 @@ const LeaderboardModule = {
                     };
                 }
 
-                const hasReviewedScores = Object.values(member.totalReviewedScores).some(score => score > 0);
-                const effectiveScores = hasReviewedScores ? member.totalReviewedScores : member.totalScores;
+                const effectiveScores = member?.totalReviewedScores ?? member?.totalScores ?? {};
                 const memberScore = window.appUtils.products.reduce(
                     (sum, product) => sum + (effectiveScores[product] || 0), 0
                 );
@@ -473,8 +473,7 @@ const LeaderboardModule = {
                     };
                 }
 
-                const hasReviewedScores = Object.values(member.totalReviewedScores).some(score => score > 0);
-                const effectiveScores = hasReviewedScores ? member.totalReviewedScores : member.totalScores;
+                const effectiveScores = member?.totalReviewedScores ?? member?.totalScores ?? {};
                 const memberScore = window.appUtils.products.reduce(
                     (sum, product) => sum + (effectiveScores[product] || 0), 0
                 );
@@ -521,6 +520,121 @@ const LeaderboardModule = {
         } catch (error) {
             console.error('Error loading top team leaders:', error);
             this.renderErrorLeaderboard('top-leaders');
+        }
+    },
+
+    // Load Teams With Zero Scores
+    async loadTeamsWithZeroScores() {
+        try {
+            const [scoresData, memberDetails, teamsData] = await Promise.all([
+                this.getAggregatedScores(),
+                this.getMemberDetails(),
+                this.getTeamsData()
+            ]);
+
+            const lang = window.appUtils.currentLanguage();
+            const teamScores = {};
+
+            // Step 1: Collect and evaluate scores per team
+            for (const [memberId, details] of Object.entries(memberDetails)) {
+                const teamCode = details.teamCode;
+                const scoreEntry = scoresData[memberId];
+
+                if (!teamScores[teamCode]) {
+                    teamScores[teamCode] = {
+                        totalScore: 0,
+                        hasZeroScoreMembers: false,
+                        members: []
+                    };
+                }
+
+                const isReviewed = !!scoreEntry?.totalReviewedScores;
+                const effectiveScores = isReviewed
+                    ? scoreEntry.totalReviewedScores
+                    : scoreEntry?.totalScores ?? {};
+
+                const memberScore = window.appUtils.products.reduce(
+                    (sum, product) => sum + (effectiveScores[product] || 0),
+                    0
+                );
+
+                teamScores[teamCode].members.push({
+                    ...details,
+                    score: memberScore,
+                    isReviewed
+                });
+
+                if (memberScore === 0) {
+                    teamScores[teamCode].hasZeroScoreMembers = true;
+                }
+
+                teamScores[teamCode].totalScore += memberScore;
+            }
+
+            // Step 2: Extract teams with zero-score members
+            const teamsWithZeroScores = Object.entries(teamScores)
+                .filter(([_, team]) => team.hasZeroScoreMembers)
+                .map(([teamId, team]) => {
+                    const zeroMembers = team.members.filter(m => m.score === 0);
+                    return {
+                        name: teamsData[teamId]?.name || teamId,
+                        leader: teamsData[teamId]?.leader || '—',
+                        score: team.totalScore,
+                        zeroScoreCount: zeroMembers.length,
+                        zeroScoreMembers: zeroMembers.map(m => ({
+                            name: m.name,
+                            isReviewed: m.isReviewed
+                        }))
+                    };
+                })
+                .sort((a, b) => b.score - a.score);
+
+            // Step 3: Render
+            const container = document.getElementById('teams-with-zero-scores');
+            if (!container) return;
+
+            if (teamsWithZeroScores.length === 0) {
+                container.innerHTML = `
+            <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                ${lang === 'ar' ? 'لا يوجد أعضاء بدون انتاجية' : 'No zero-score members'}
+            </p>`;
+                return;
+            }
+
+            container.innerHTML = `
+        <div class="zero-score-table-wrapper">
+            <table class="zero-score-table">
+                <thead>
+                    <tr>
+                        <th>${lang === 'ar' ? 'الفريق' : 'Team'}</th>
+                        <th>${lang === 'ar' ? 'القائد' : 'Leader'}</th>
+                        <th>${lang === 'ar' ? 'عدد الأعضاء بدون انتاجية' : 'Zero Members'}</th>
+                        <th>${lang === 'ar' ? 'أسماء الأعضاء' : 'Member Names'}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${teamsWithZeroScores.map(team => `
+                        <tr>
+                            <td>${team.name}</td>
+                            <td class="leader-cell">${team.leader}</td>
+                            <td><span class="count-badge">${team.zeroScoreCount}</span></td>
+                            <td class="member-names">
+                                ${team.zeroScoreMembers.map(m => `
+                                    <span class="member-badge ${m.isReviewed ? 'reviewed' : ''}">
+                                        ${m.name}${m.isReviewed ? ' ✅' : ''}
+                                    </span>
+                                `).join('')}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+        } catch (error) {
+            console.error('Error loading teams with zero scores:', error);
+            this.renderErrorLeaderboard('teams-with-zero-scores');
         }
     },
 

@@ -405,6 +405,7 @@ const AdminModule = {
                 scores: {},
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             };
+            currentData.reviewedScores = currentData.reviewedScores || {};
 
             // Update the specific product score
             currentData.reviewedScores[product] = numScore;
@@ -420,6 +421,7 @@ const AdminModule = {
                 if (!cachedScores[memberId]) {
                     cachedScores[memberId] = { reviewedScores: {}, scores: {} };
                 }
+                cachedScores[memberId].reviewedScores = currentData.reviewedScores || {};
                 cachedScores[memberId].reviewedScores[product] = numScore;
             }
 
