@@ -83,6 +83,9 @@ const LeaderboardModule = {
             case 'today':
                 this.currentStartDate = this.currentEndDate = window.appUtils.getTodayString();
                 break;
+            case 'yesterday':
+                this.currentStartDate = this.currentEndDate = window.appUtils.getYesterdayString();
+                break;
 
             case 'week':
                 const startOfWeek = new Date(today);
