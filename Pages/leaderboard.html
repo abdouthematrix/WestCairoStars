@@ -1,4 +1,61 @@
-<div id="leaderboard-view">   
+<div id="leaderboard-view">
+    <!-- Static Date Filters -->
+    <div id="date-filters-container" class="date-filters-container">
+        <div class="date-filters-header">
+            <h3 data-en="Filter by Date" data-ar="تصفية حسب التاريخ">تصفية حسب التاريخ</h3>
+            <button class="refresh-btn" onclick="window.modules.leaderboard.refreshLeaderboards()"
+                    data-en="🔄 Refresh" data-ar="🔄 تحديث">
+                🔄 تحديث
+            </button>
+        </div>
+
+        <div class="date-filter-buttons">
+            <button class="filter-btn active" id="filter-today"
+                    onclick="window.modules.leaderboard.setDateFilter('today')"
+                    data-en="Today" data-ar="اليوم">
+                اليوم
+            </button>
+
+            <button class="filter-btn" id="filter-week"
+                    onclick="window.modules.leaderboard.setDateFilter('week')"
+                    data-en="This Week" data-ar="هذا الأسبوع">
+                هذا الأسبوع
+            </button>
+
+            <button class="filter-btn" id="filter-month"
+                    onclick="window.modules.leaderboard.setDateFilter('month')"
+                    data-en="This Month" data-ar="هذا الشهر">
+                هذا الشهر
+            </button>
+
+            <button class="filter-btn" id="filter-range"
+                    onclick="window.modules.leaderboard.setDateFilter('range')"
+                    data-en="Custom Range" data-ar="نطاق مخصص">
+                نطاق مخصص
+            </button>
+        </div>
+
+        <div class="date-range-picker hidden" id="date-range-picker">
+            <div class="date-inputs">
+                <div class="date-input-group">
+                    <label data-en="From:" data-ar="من:">من:</label>
+                    <input type="date" id="start-date">
+                </div>
+                <div class="date-input-group">
+                    <label data-en="To:" data-ar="إلى:">إلى:</label>
+                    <input type="date" id="end-date">
+                </div>
+                <button class="apply-range-btn" onclick="window.modules.leaderboard.applyDateRange()"
+                        data-en="Apply Range" data-ar="تطبيق النطاق">
+                    تطبيق النطاق
+                </button>
+            </div>
+            <div class="current-range-display" id="current-range-display">
+                لم يتم تحديد نطاق
+            </div>
+        </div>
+    </div>
+
     <!-- Leaderboards -->
     <div class="leaderboard-grid">
         <!-- Top Achievers -->
@@ -31,4 +88,4 @@
             </div>
         </div>
     </div>
-</div> 
+</div>

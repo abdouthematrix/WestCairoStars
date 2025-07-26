@@ -1,117 +1,260 @@
-﻿//==========================Admin Module==================================//
+﻿//==========================Admin Module - Subcollection Structure==================================//
 
-const AdminModule = {    
-    // Load all teams for admin management
+const AdminModule = {
+    // Current review date - defaults to today
+    currentReviewDate: null,
+
+    // Cache for performance optimization
+    teamsCache: null,
+    membersCache: new Map(), // teamId -> members array
+    scoresCache: new Map(),  // "teamId-date" -> scores data
+
+    // Initialize the admin module
+    init() {
+        this.currentReviewDate = window.appUtils.getTodayString();
+        this.updateDateDisplay();
+        this.clearAllCaches();
+    },
+
+    // Cache management
+    clearAllCaches() {
+        this.teamsCache = null;
+        this.membersCache.clear();
+        this.scoresCache.clear();
+    },
+
+    clearTeamCache(teamId) {
+        this.membersCache.delete(teamId);
+        // Clear score caches for this team
+        for (const [key] of this.scoresCache) {
+            if (key.startsWith(teamId + '-')) {
+                this.scoresCache.delete(key);
+            }
+        }
+    },
+
+    // Date filtering functions
+    setReviewDate(dateType) {
+        const currentLanguage = window.appUtils.currentLanguage();
+
+        // Remove active class from all buttons
+        document.querySelectorAll('.date-filter-buttons .filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Hide custom date picker
+        document.getElementById('admin-date-picker').classList.add('hidden');
+
+        let newDate;
+        let displayText;
+
+        switch (dateType) {
+            case 'today':
+                newDate = window.appUtils.getTodayString();
+                displayText = currentLanguage === 'ar' ? 'اليوم' : 'Today';
+                document.getElementById('admin-filter-today').classList.add('active');
+                break;
+
+            case 'yesterday':
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                newDate = yesterday.toISOString().split('T')[0];
+                displayText = currentLanguage === 'ar' ? 'أمس' : 'Yesterday';
+                document.getElementById('admin-filter-yesterday').classList.add('active');
+                break;
+
+            case 'custom':
+                document.getElementById('admin-filter-custom').classList.add('active');
+                document.getElementById('admin-date-picker').classList.remove('hidden');
+                document.getElementById('admin-custom-date').value = window.appUtils.getTodayString();
+                return; // Don't reload yet, wait for user to select date
+        }
+
+        if (newDate) {
+            this.currentReviewDate = newDate;
+            this.updateDateDisplay(displayText);
+            this.clearAllCaches(); // Clear cache when date changes
+            this.loadAllTeamsForAdmin();
+        }
+    },
+
+    applyCustomDate() {
+        const customDate = document.getElementById('admin-custom-date').value;
+        if (!customDate) return;
+
+        this.currentReviewDate = customDate;
+
+        // Format date for display
+        const dateObj = new Date(customDate + 'T00:00:00');
+        const displayText = dateObj.toLocaleDateString(
+            window.appUtils.currentLanguage() === 'ar' ? 'ar-EG' : 'en-US',
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+        );
+
+        this.updateDateDisplay(displayText);
+        this.clearAllCaches();
+        this.loadAllTeamsForAdmin();
+    },
+
+    updateDateDisplay(customText = null) {
+        const currentLanguage = window.appUtils.currentLanguage();
+        const displayElement = document.getElementById('admin-selected-date-text');
+
+        if (customText) {
+            displayElement.textContent = customText;
+        } else {
+            displayElement.textContent = currentLanguage === 'ar' ? 'اليوم' : 'Today';
+        }
+    },
+
+    // Get formatted date string for current review date
+    getReviewDateString() {
+        return this.currentReviewDate || window.appUtils.getTodayString();
+    },
+
+    // Check if current review date is today or yesterday
+    isReviewingTodayOrYesterday() {
+        return this.getReviewDateString() === window.appUtils.getTodayString() ||
+            this.getReviewDateString() === window.appUtils.getYesterdayString();
+    },
+
+    // Load all teams with caching
+    async loadTeams() {
+        if (this.teamsCache) {
+            return this.teamsCache;
+        }
+
+        const { db } = window.appUtils;
+
+        try {
+            // Load admin and regular teams in parallel
+            const [adminTeamsSnapshot, regularTeamsSnapshot] = await Promise.all([
+                db.collection('teams').where('isAdmin', '==', true).get(),
+                db.collection('teams').where('isAdmin', '==', false).get()
+            ]);
+
+            this.teamsCache = {
+                admin: adminTeamsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })),
+                regular: regularTeamsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+            };
+
+            return this.teamsCache;
+        } catch (error) {
+            console.error('Error loading teams:', error);
+            throw error;
+        }
+    },
+
+    // Load team members with caching
+    async loadTeamMembers(teamId) {
+        if (this.membersCache.has(teamId)) {
+            return this.membersCache.get(teamId);
+        }
+
+        const { db } = window.appUtils;
+
+        try {
+            const membersSnapshot = await db.collection('teamMembers')
+                .where('teamCode', '==', teamId)
+                .get();
+
+            const members = membersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            this.membersCache.set(teamId, members);
+            return members;
+        } catch (error) {
+            console.error('Error loading team members:', error);
+            return [];
+        }
+    },
+
+    // Load scores for specific date and team using subcollection structure
+    async loadTeamScores(teamId, date) {
+        const cacheKey = `${teamId}-${date}`;
+
+        if (this.scoresCache.has(cacheKey)) {
+            return this.scoresCache.get(cacheKey);
+        }
+
+        const { db } = window.appUtils;
+
+        try {
+            // Query subcollection: scores/{date}/{teamId}/
+            const scoresSnapshot = await db.collection('scores')
+                .doc(date)
+                .collection(teamId)
+                .get();
+
+            const scoresMap = {};
+            scoresSnapshot.forEach(doc => {
+                scoresMap[doc.id] = doc.data();
+            });
+
+            this.scoresCache.set(cacheKey, scoresMap);
+            return scoresMap;
+        } catch (error) {
+            console.error('Error loading team scores:', error);
+            return {};
+        }
+    },
+
+    // Main function to load all teams for admin interface
     async loadAllTeamsForAdmin() {
         const container = document.getElementById('admin-teams-container');
         if (!container) return;
 
         container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-        const { db, products } = window.appUtils;
+
         const currentLanguage = window.appUtils.currentLanguage();
+        const reviewDate = this.getReviewDateString();
+        const isTodayOrYesterday = this.isReviewingTodayOrYesterday();
 
         try {
-            // Query admin teams and regular teams separately
-            const adminTeamsSnapshot = await db.collection('teams')
-                .where('isAdmin', '==', true)
-                .get();
+            // Load all teams
+            const teams = await this.loadTeams();
 
-            const regularTeamsSnapshot = await db.collection('teams')
-                .where('isAdmin', '==', false)
-                .get();
-
+            // Build header HTML
             let html = `
                 <div class="admin-header">
                     <h2 data-en="Team Management" data-ar="إدارة الفرق">إدارة الفرق</h2>
-                    <button class="btn btn-primary" onclick="createNewTeam()" data-en="+ Create New Team" data-ar="+ إنشاء فريق جديد">+ إنشاء فريق جديد</button>
-                    <button id="resetAllScoresBtn" class="btn btn-danger" onclick="resetAllScores()" data-en="🔄 Reset All Scores" data-ar="🔄 إعادة تعيين جميع الدرجات">🔄 إعادة تعيين جميع الدرجات</button>
+                    <div class="admin-header-actions">
+                        <span class="date-context-indicator">
+                            ${isTodayOrYesterday ?
+                    (currentLanguage === 'ar' ? 'مراجعة اليوم' : 'Today\'s Review') :
+                    (currentLanguage === 'ar' ? 'مراجعة تاريخية' : 'Historical Review')
+                }
+                        </span>
+                        <button class="btn btn-primary" onclick="createNewTeam()" data-en="+ Create New Team" data-ar="+ إنشاء فريق جديد">+ إنشاء فريق جديد</button>
+                        ${isTodayOrYesterday ? `
+                            <button id="resetAllScoresBtn" class="btn btn-danger" onclick="resetAllScores()" data-en="🔄 Reset All Scores" data-ar="🔄 إعادة تعيين جميع الدرجات">🔄 إعادة تعيين جميع الدرجات</button>
+                        ` : ''}
+                    </div>
                 </div>
             `;
 
-            // Helper function to render team
-            const renderTeam = async (teamDoc, isAdminTeam) => {
-                const team = teamDoc.data();
-                const teamId = teamDoc.id;
-
-                // Get team members
-                const membersSnapshot = await db.collection('teamMembers')
-                    .where('teamCode', '==', teamId)
-                    .get();
-
-                const memberRows = await Promise.all(
-                    membersSnapshot.docs.map(memberDoc => this.renderEnhancedAdminMemberRow(teamId, memberDoc, isAdminTeam))
-                );
-
-                return `
-                    <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''}">
-                        <div class="team-header">
-                            <div class="team-info">
-                                <h3>${team.name || teamId} ${isAdminTeam ? '<span class="admin-badge" data-en="ADMIN" data-ar="إدارة">إدارة</span>' : ''}</h3>
-                                <p class="team-code">UID: ${teamId}</p>
-                                ${!isAdminTeam && team.leader ? `<p class="team-leader">Leader: ${team.leader}</p>` : ''}
-                            </div>
-                            <div class="team-actions">
-                                ${!isAdminTeam ? `
-                                    <button class="edit-btn btn-small" onclick="editTeamInfo('${teamId}', '${team.name}', '${team.leader}')" data-en="Edit Team" data-ar="تعديل الفريق">تعديل الفريق</button>
-                                    <button class="edit-btn btn-small" onclick="editTeamLeader('${teamId}', '${team.leader}')" data-en="Edit Leader" data-ar="تعديل القائد">تعديل القائد</button>
-                                    <button class="edit-btn btn-small" onclick="changeTeamCode('${teamId}', '${team.name}')" data-en="Change Code" data-ar="تغيير الرمز">تغيير الرمز</button>
-                                    <button class="delete-btn btn-small" onclick="deleteTeam('${teamId}', '${team.name}')" data-en="Delete Team" data-ar="حذف الفريق">حذف الفريق</button>
-                                ` : `
-                                    <span class="admin-protected-text" data-en="Admin Team - Protected" data-ar="فريق الإدارة - محمي">فريق الإدارة - محمي</span>
-                                `}
-                            </div>
-                        </div>
-                        
-                        <div class="members-section">
-                            <div class="members-header">
-                                <h4 data-en="Team Members" data-ar="أعضاء الفريق">أعضاء الفريق</h4>
-                                ${!isAdminTeam ? `
-                                    <button class="btn btn-success btn-small" onclick="addMemberToTeam('${teamId}')" data-en="+ Add Member" data-ar="+ إضافة عضو">+ إضافة عضو</button>
-                                    <button class="btn btn-warning btn-small" onclick="resetTeamScores('${teamId}', '${team.name}')" data-en="🔄 Reset Team" data-ar="🔄 إعادة تعيين الفريق">🔄 إعادة تعيين الفريق</button>
-                                ` : ''}
-                            </div>
-                            
-                            <table class="members-table">
-                                <thead>
-                                    <tr>
-                                        <th data-en="Name" data-ar="الاسم">الاسم</th>
-                                        <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
-                                        <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
-                                        <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
-                                        <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضمانة">بطاقة ائتمان بدون ضمانة</th>
-                                        <th data-en="Bancassurance" data-ar="التأمين البنكي">التأمين البنكي</th>
-                                        <th data-en="Total" data-ar="المجموع">المجموع</th>
-                                        <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${memberRows.join('')}
-                                    ${isAdminTeam && membersSnapshot.docs.length === 0 ? `
-                                        <tr><td colspan="${products.length + 3}" class="no-members" data-en="Admin team - No members required" data-ar="فريق الإدارة - لا يتطلب أعضاء">فريق الإدارة - لا يتطلب أعضاء</td></tr>
-                                    ` : ''}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-            };
-
             // Render admin teams first
-            for (const teamDoc of adminTeamsSnapshot.docs) {
-                html += await renderTeam(teamDoc, true);
+            for (const team of teams.admin) {
+                html += await this.renderTeamSection(team, true, reviewDate, isTodayOrYesterday);
             }
 
             // Then render regular teams
-            for (const teamDoc of regularTeamsSnapshot.docs) {
-                html += await renderTeam(teamDoc, false);
+            for (const team of teams.regular) {
+                html += await this.renderTeamSection(team, false, reviewDate, isTodayOrYesterday);
             }
 
             container.innerHTML = html;
 
             // Update language for new elements
-            document.querySelectorAll('[data-en][data-ar]').forEach(element => {
-                element.textContent = element.getAttribute(`data-${currentLanguage}`);
-            });
+            this.updateLanguageElements();
 
         } catch (error) {
             console.error('Error loading teams for admin:', error);
@@ -119,44 +262,216 @@ const AdminModule = {
         }
     },
 
-    // Render enhanced admin member row
-    async renderEnhancedAdminMemberRow(teamId, memberDoc, isAdminTeam = false) {
-        const member = memberDoc.data();
-        const memberId = memberDoc.id;
-        const dailyScores = await window.appUtils.loadDailyScores(memberId, teamId, window.appUtils.getTodayString());
-        const reviewed = dailyScores?.reviewedScores || {};
-        const scores = dailyScores?.scores || {};
-        const { products } = window.appUtils;
-        const currentLanguage = window.appUtils.currentLanguage();
+    // Render individual team section
+    async renderTeamSection(team, isAdminTeam, reviewDate, isTodayOrYesterday) {
+        const teamId = team.id;
 
-        const total = Object.values(reviewed).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
+        // Load team members and scores in parallel
+        const [members, scores] = await Promise.all([
+            this.loadTeamMembers(teamId),
+            this.loadTeamScores(teamId, reviewDate)
+        ]);
+
+        const memberRows = this.renderMemberRows(members, scores, teamId, isAdminTeam, isTodayOrYesterday);
+        const contextClass = isTodayOrYesterday ? 'today-scores' : 'historical-scores';
 
         return `
-            <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''}">
-                <td>${member.name}</td>
-                ${products.map(product => `
-                    <td>
-                        <input type="number" 
-                               min="0" 
-                               class="score-input" 
-                               value="${reviewed[product] || ''}" 
-                               id="reviewed-${memberId}-${product}"
-                               ${isAdminTeam ? 'disabled' : ''}
-                               onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)">
-                               <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">${scores[product] || '0'}</div>   
-                    </td>
-                `).join('')}
-                <td><strong>${total}</strong></td>
-                <td class="action-btns">
-                    ${!isAdminTeam ? `
-                        <button class="edit-btn btn-small" onclick="editMemberName('${memberId}', '${member.name}')" data-en="Edit" data-ar="تعديل">تعديل</button>
-                        <button class="delete-btn btn-small" onclick="removeMemberFromTeam('${memberId}', '${member.name}')" data-en="Remove" data-ar="حذف">حذف</button>
-                    ` : `
-                        <span class="admin-protected" data-en="Protected" data-ar="محمي">محمي</span>
-                    `}
-                </td>
-            </tr>
+            <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''} ${contextClass}">
+                <div class="team-header">
+                    <div class="team-info">
+                        <h3>${team.name || teamId} ${isAdminTeam ? '<span class="admin-badge" data-en="ADMIN" data-ar="إدارة">إدارة</span>' : ''}</h3>
+                        <p class="team-code">Code: ${teamId}</p>
+                        ${!isAdminTeam && team.leader ? `<p class="team-leader">Leader: ${team.leader}</p>` : ''}
+                    </div>
+                    <div class="team-actions">
+                        ${!isAdminTeam ? `
+                            <button class="edit-btn btn-small" onclick="editTeamInfo('${teamId}', '${team.name}', '${team.leader || ''}')" data-en="Edit Team" data-ar="تعديل الفريق">تعديل الفريق</button>
+                            <button class="edit-btn btn-small" onclick="editTeamLeader('${teamId}', '${team.leader || ''}')" data-en="Edit Leader" data-ar="تعديل القائد">تعديل القائد</button>
+                            <button class="edit-btn btn-small" onclick="changeTeamCode('${teamId}', '${team.name}')" data-en="Change Code" data-ar="تغيير الرمز">تغيير الرمز</button>
+                            <button class="delete-btn btn-small" onclick="deleteTeam('${teamId}', '${team.name}')" data-en="Delete Team" data-ar="حذف الفريق">حذف الفريق</button>
+                        ` : `
+                            <span class="admin-protected-text" data-en="Admin Team - Protected" data-ar="فريق الإدارة - محمي">فريق الإدارة - محمي</span>
+                        `}
+                    </div>
+                </div>
+                
+                <div class="members-section">
+                    <div class="members-header">
+                        <h4 data-en="Team Members" data-ar="أعضاء الفريق">أعضاء الفريق</h4>
+                        ${!isAdminTeam ? `
+                            <button class="btn btn-success btn-small" onclick="addMemberToTeam('${teamId}')" data-en="+ Add Member" data-ar="+ إضافة عضو">+ إضافة عضو</button>
+                            ${isTodayOrYesterday ? `
+                                <button class="btn btn-warning btn-small" onclick="resetTeamScores('${teamId}', '${team.name}')" data-en="🔄 Reset Team" data-ar="🔄 إعادة تعيين الفريق">🔄 إعادة تعيين الفريق</button>
+                            ` : ''}
+                        ` : ''}
+                    </div>
+                    
+                    <table class="members-table">
+                        <thead>
+                            <tr>
+                                <th data-en="Name" data-ar="الاسم">الاسم</th>
+                                <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
+                                <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
+                                <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
+                                <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضमانة">بطاقة ائتمان بدون ضمانة</th>
+                                <th data-en="Bancassurance" data-ar="التأمين البنكي">التأمين البنكي</th>
+                                <th data-en="Total" data-ar="المجموع">المجموع</th>
+                                <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${memberRows}
+                            ${isAdminTeam && members.length === 0 ? `
+                                <tr><td colspan="8" class="no-members" data-en="Admin team - No members required" data-ar="فريق الإدارة - لا يتطلب أعضاء">فريق الإدارة - لا يتطلب أعضاء</td></tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         `;
+    },
+
+    // Render member rows for the team table
+    renderMemberRows(members, scores, teamId, isAdminTeam, isTodayOrYesterday) {
+        const { products } = window.appUtils;
+
+        return members.map(member => {
+            const memberId = member.id;
+            const memberScores = scores[memberId] || {};
+            const reviewedScores = memberScores.reviewedScores || {};
+            const originalScores = memberScores.scores || {};
+
+            // Calculate total from reviewed scores
+            const total = Object.values(reviewedScores).reduce((sum, score) => {
+                return sum + (parseInt(score) || 0);
+            }, 0);
+
+            return `
+                <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''}">
+                    <td>${member.name}</td>
+                    ${products.map(product => `
+                        <td>
+                            <input type="number" 
+                                   min="0" 
+                                   class="score-input" 
+                                   value="${reviewedScores[product] || ''}" 
+                                   id="reviewed-${memberId}-${product}"
+                                   ${isAdminTeam || !isTodayOrYesterday ? 'disabled' : ''}
+                                   ${isTodayOrYesterday && !isAdminTeam ? `onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)"` : ''}>
+                            <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
+                                Original: ${originalScores[product] || '0'}
+                            </div>   
+                        </td>
+                    `).join('')}
+                    <td><strong>${total}</strong></td>
+                    <td class="action-btns">
+                        ${!isAdminTeam ? `
+                            <button class="edit-btn btn-small" onclick="editMemberName('${memberId}', '${member.name}')" data-en="Edit" data-ar="تعديل">تعديل</button>
+                            <button class="delete-btn btn-small" onclick="removeMemberFromTeam('${memberId}', '${member.name}')" data-en="Remove" data-ar="حذف">حذف</button>
+                        ` : `
+                            <span class="admin-protected" data-en="Protected" data-ar="محمي">محمي</span>
+                        `}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    // Auto-save score function using subcollection structure
+    async autoSaveScore(teamId, memberId, product, score) {
+        if (!this.isReviewingTodayOrYesterday()) {
+            alert(window.appUtils.currentLanguage() === 'ar' ?
+                'يمكن تعديل درجات اليوم او امس فقط' :
+                'Can only edit today\'s or yesterday\'s scores');
+            return;
+        }
+
+        const { db } = window.appUtils;
+        const reviewDate = this.getReviewDateString();
+
+        try {
+            const numScore = parseInt(score) || 0;
+
+            // Save to subcollection: scores/{date}/{teamId}/{memberId}
+            const memberScoreRef = db.collection('scores')
+                .doc(reviewDate)
+                .collection(teamId)
+                .doc(memberId);
+
+            // Get current data or create new structure
+            const currentDoc = await memberScoreRef.get();
+            const currentData = currentDoc.exists ? currentDoc.data() : {
+                reviewedScores: {},
+                scores: {},
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Update the specific product score
+            currentData.reviewedScores[product] = numScore;
+            currentData.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
+
+            // Save to database
+            await memberScoreRef.set(currentData, { merge: true });
+
+            // Update cache
+            const cacheKey = `${teamId}-${reviewDate}`;
+            if (this.scoresCache.has(cacheKey)) {
+                const cachedScores = this.scoresCache.get(cacheKey);
+                if (!cachedScores[memberId]) {
+                    cachedScores[memberId] = { reviewedScores: {}, scores: {} };
+                }
+                cachedScores[memberId].reviewedScores[product] = numScore;
+            }
+
+            // Update UI total
+            this.updateMemberRowTotal(memberId);
+
+            // Visual feedback
+            this.showSaveSuccess(memberId);
+
+        } catch (error) {
+            console.error('Error auto-saving score:', error);
+            alert(window.appUtils.currentLanguage() === 'ar' ?
+                'خطأ في حفظ الدرجة' : 'Error saving score');
+        }
+    },
+
+    // Update member row total display
+    updateMemberRowTotal(memberId) {
+        const { products } = window.appUtils;
+        const row = document.getElementById(`admin-member-row-${memberId}`);
+        if (!row) return;
+
+        const totalCell = row.querySelector('td:nth-last-child(2) strong');
+        if (totalCell) {
+            let newTotal = 0;
+            products.forEach(product => {
+                const input = document.getElementById(`reviewed-${memberId}-${product}`);
+                if (input && input.value) {
+                    newTotal += parseInt(input.value) || 0;
+                }
+            });
+            totalCell.textContent = newTotal;
+        }
+    },
+
+    // Show visual feedback for successful save
+    showSaveSuccess(memberId) {
+        const row = document.getElementById(`admin-member-row-${memberId}`);
+        if (row) {
+            row.style.background = '#d1fae5';
+            setTimeout(() => {
+                row.style.background = '';
+            }, 1000);
+        }
+    },
+
+    // Update language elements
+    updateLanguageElements() {
+        const currentLanguage = window.appUtils.currentLanguage();
+        document.querySelectorAll('[data-en][data-ar]').forEach(element => {
+            element.textContent = element.getAttribute(`data-${currentLanguage}`);
+        });
     },
 
     // Team Management Functions
@@ -190,6 +505,9 @@ const AdminModule = {
             });
 
             alert(currentLanguage === 'ar' ? 'تم إنشاء الفريق بنجاح' : 'Team created successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error creating team:', error);
@@ -230,6 +548,9 @@ const AdminModule = {
             await db.collection('teams').doc(teamId).delete();
 
             alert(currentLanguage === 'ar' ? 'تم حذف الفريق بنجاح' : 'Team deleted successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error deleting team:', error);
@@ -254,6 +575,9 @@ const AdminModule = {
             });
 
             alert(currentLanguage === 'ar' ? 'تم تحديث اسم الفريق بنجاح' : 'Team name updated successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error updating team name:', error);
@@ -278,6 +602,9 @@ const AdminModule = {
             });
 
             alert(currentLanguage === 'ar' ? 'تم تحديث قائد الفريق بنجاح' : 'Team leader updated successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error updating team leader:', error);
@@ -297,25 +624,14 @@ const AdminModule = {
             const newMember = {
                 name: memberName.trim(),
                 teamCode: teamCode,
-                scores: {
-                    securedLoan: 0,
-                    securedCreditCard: 0,
-                    unsecuredLoan: 0,
-                    unsecuredCreditCard: 0,
-                    bancassurance: 0
-                },
-                reviewedScores: {
-                    securedLoan: 0,
-                    securedCreditCard: 0,
-                    unsecuredLoan: 0,
-                    unsecuredCreditCard: 0,
-                    bancassurance: 0
-                },
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             await db.collection('teamMembers').add(newMember);
             alert(currentLanguage === 'ar' ? 'تم إضافة العضو بنجاح' : 'Member added successfully');
+
+            // Clear specific team cache and reload
+            this.clearTeamCache(teamCode);
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error adding member:', error);
@@ -340,6 +656,9 @@ const AdminModule = {
             });
 
             alert(currentLanguage === 'ar' ? 'تم تحديث اسم العضو بنجاح' : 'Member name updated successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error updating member name:', error);
@@ -360,41 +679,13 @@ const AdminModule = {
         try {
             await db.collection('teamMembers').doc(memberId).delete();
             alert(currentLanguage === 'ar' ? 'تم حذف العضو بنجاح' : 'Member removed successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error removing member:', error);
             alert(currentLanguage === 'ar' ? 'خطأ في حذف العضو' : 'Error removing member');
-        }
-    },
-
-    // Auto-save score function
-    async autoSaveScore(teamId, memberId, product, score) {
-        const { db, products } = window.appUtils;
-
-        try {
-            const numScore = parseInt(score) || 0;
-
-            await window.appUtils.saveDailyreviewedScores(memberId, teamId, window.appUtils.getTodayString(), product, numScore);   
-
-            // Update total in the row
-            const row = document.getElementById(`admin-member-row-${memberId}`);
-            if (row) {
-                const totalCell = row.querySelector('td:nth-last-child(2) strong');
-                if (totalCell) {
-                    let newTotal = 0;
-                    products.forEach(prod => {
-                        const input = document.getElementById(`reviewed-${memberId}-${prod}`);
-                        if (input) newTotal += parseInt(input.value) || 0;
-                    });
-                    totalCell.textContent = newTotal;
-                }
-
-                // Visual feedback
-                row.style.background = '#d1fae5';
-                setTimeout(() => { row.style.background = ''; }, 1000);
-            }
-        } catch (error) {
-            console.error('Error auto-saving score:', error);
         }
     },
 
@@ -446,6 +737,9 @@ const AdminModule = {
             await db.collection('teams').doc(oldTeamId).delete();
 
             alert(currentLanguage === 'ar' ? 'تم تغيير رمز الفريق بنجاح' : 'Team code changed successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
         } catch (error) {
             console.error('Error changing team code:', error);
@@ -453,10 +747,11 @@ const AdminModule = {
         }
     },
 
-    // Reset Functions
+    // Reset Functions using subcollection structure
     async resetAllScores() {
         const currentLanguage = window.appUtils.currentLanguage();
         const { db } = window.appUtils;
+        const today = window.appUtils.getTodayString();
 
         const confirmMessage = currentLanguage === 'ar'
             ? 'هل أنت متأكد من إعادة تعيين جميع درجات جميع أعضاء الفرق؟ هذا الإجراء لا يمكن التراجع عنه!'
@@ -477,58 +772,63 @@ const AdminModule = {
         }
 
         try {
-            // Get all teams excluding admin teams
-            const teamsSnapshot = await db.collection('teams').get();
-            const teamCodes = teamsSnapshot.docs
-                .filter(doc => {
-                    const data = doc.data();
-                    return !data.isAdmin;
-                })
-                .map(doc => doc.id);
-
-            if (teamCodes.length === 0) {
-                alert(currentLanguage === 'ar' ? 'لا توجد بيانات للإعادة تعيين' : 'No data to reset');
-                return;
-            }
-
-            // Get all members from non-admin teams
-            const membersSnapshot = await db.collection('teamMembers')
-                .where('teamCode', 'in', teamCodes)
+            // Get all non-admin teams
+            const teamsSnapshot = await db.collection('teams')
+                .where('isAdmin', '==', false)
                 .get();
 
-            if (membersSnapshot.empty) {
+            if (teamsSnapshot.empty) {
                 alert(currentLanguage === 'ar' ? 'لا توجد بيانات للإعادة تعيين' : 'No data to reset');
                 return;
             }
 
-            // Reset all scores
-            const batch = db.batch();
-            const resetScores = {
-                securedLoan: 0,
-                securedCreditCard: 0,
-                unsecuredLoan: 0,
-                unsecuredCreditCard: 0,
-                bancassurance: 0
-            };
+            let totalResetCount = 0;
 
-            membersSnapshot.forEach(doc => {
-                batch.update(doc.ref, {
-                    scores: resetScores,
-                    reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    resetAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            });
+            // Reset scores for each team using subcollection structure
+            for (const teamDoc of teamsSnapshot.docs) {
+                const teamId = teamDoc.id;
 
-            await batch.commit();
+                // Get all scores for this team today using subcollection
+                const scoresSnapshot = await db.collection('scores')
+                    .doc(today)
+                    .collection(teamId)
+                    .get();
+
+                if (!scoresSnapshot.empty) {
+                    const batch = db.batch();
+                    const resetScores = {
+                        securedLoan: 0,
+                        securedCreditCard: 0,
+                        unsecuredLoan: 0,
+                        unsecuredCreditCard: 0,
+                        bancassurance: 0
+                    };
+
+                    scoresSnapshot.forEach(scoreDoc => {
+                        // Reset both original scores and reviewed scores
+                        batch.update(scoreDoc.ref, {
+                            scores: resetScores,
+                            reviewedScores: resetScores,
+                            resetAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    });
+
+                    await batch.commit();
+                    totalResetCount += scoresSnapshot.size;
+                }
+            }
 
             alert(currentLanguage === 'ar'
-                ? `تم إعادة تعيين درجات لـ ${membersSnapshot.size} عضو بنجاح`
-                : `Successfully reset scores for ${membersSnapshot.size} members`);
+                ? `تم إعادة تعيين درجات لـ ${totalResetCount} عضو بنجاح`
+                : `Successfully reset scores for ${totalResetCount} members`);
 
+            // Clear cache and reload
+            this.clearAllCaches();
             await this.loadAllTeamsForAdmin();
 
         } catch (error) {
-            console.error('Error resetting scores:', error);
+            console.error('Error resetting all scores:', error);
             alert(currentLanguage === 'ar' ? 'خطأ في إعادة تعيين الدرجات' : 'Error resetting scores');
         } finally {
             if (resetButton) {
@@ -541,6 +841,7 @@ const AdminModule = {
     async resetTeamScores(teamCode, teamName) {
         const currentLanguage = window.appUtils.currentLanguage();
         const { db } = window.appUtils;
+        const today = window.appUtils.getTodayString();
 
         const confirmMessage = currentLanguage === 'ar'
             ? `هل أنت متأكد من إعادة تعيين درجات لفريق "${teamName}"؟`
@@ -549,12 +850,14 @@ const AdminModule = {
         if (!confirm(confirmMessage)) return;
 
         try {
-            const membersSnapshot = await db.collection('teamMembers')
-                .where('teamCode', '==', teamCode)
+            // Get all scores for this team today using subcollection
+            const scoresSnapshot = await db.collection('scores')
+                .doc(today)
+                .collection(teamCode)
                 .get();
 
-            if (membersSnapshot.empty) {
-                alert(currentLanguage === 'ar' ? 'لا توجد أعضاء في هذا الفريق' : 'No members in this team');
+            if (scoresSnapshot.empty) {
+                alert(currentLanguage === 'ar' ? 'لا توجد درجات لإعادة تعيينها' : 'No scores to reset');
                 return;
             }
 
@@ -567,11 +870,12 @@ const AdminModule = {
                 bancassurance: 0
             };
 
-            membersSnapshot.forEach(doc => {
-                batch.update(doc.ref, {
+            scoresSnapshot.forEach(scoreDoc => {
+                batch.update(scoreDoc.ref, {
                     scores: resetScores,
-                    reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    teamResetAt: firebase.firestore.FieldValue.serverTimestamp()
+                    reviewedScores: resetScores,
+                    teamResetAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                 });
             });
 
@@ -581,6 +885,8 @@ const AdminModule = {
                 ? `تم إعادة تعيين درجات فريق "${teamName}" بنجاح`
                 : `Successfully reset scores for team "${teamName}"`);
 
+            // Clear specific team cache and reload
+            this.scoresCache.delete(`${teamCode}-${today}`);
             await this.loadAllTeamsForAdmin();
 
         } catch (error) {

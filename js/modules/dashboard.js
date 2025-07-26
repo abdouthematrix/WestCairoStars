@@ -1,6 +1,11 @@
-﻿//==========================Dashboard Module==================================//
+﻿// Dashboard Module - Optimized for Subcollection Structure
+// Firestore structure: scores/{date}/{teamId}/{memberId}
 
-const DashboardModule = {   
+const DashboardModule = {
+    // Cache for team members and scores
+    teamMembersCache: null,
+    currentScoresCache: null,
+
     // Load Team Members
     async loadTeamMembers(currentTeamCode, teamMembers) {
         const { db } = window.appUtils;
@@ -20,8 +25,11 @@ const DashboardModule = {
                 });
             });
 
+            // Cache the members
+            this.teamMembersCache = members;
             window.appUtils.setTeamMembers(members);
-            this.renderMembersTable();
+
+            await this.renderMembersTable();
         } catch (error) {
             console.error('Error loading team members:', error);
             window.appUtils.showErrorMessage('Error loading team members');
@@ -30,29 +38,111 @@ const DashboardModule = {
         }
     },
 
+    // Load today's scores for current team using subcollection structure
+    async loadTodayScores() {
+        const { db } = window.appUtils;
+        const currentTeamCode = window.appUtils.currentTeamCode();
+        const today = window.appUtils.getTodayString();
+
+        try {
+            // Query the subcollection: scores/{today}/{teamCode}
+            const scoresSnapshot = await db.collection('scores')
+                .doc(today)
+                .collection(currentTeamCode)
+                .get();
+
+            const scoresMap = {};
+            scoresSnapshot.docs.forEach(doc => {
+                scoresMap[doc.id] = doc.data();
+            });
+
+            this.currentScoresCache = scoresMap;
+            return scoresMap;
+
+        } catch (error) {
+            console.error('Error loading today scores:', error);
+            return {};
+        }
+    },
+
+    // Save member score using subcollection structure
+    async saveMemberScore(memberId, product, score) {
+        const { db } = window.appUtils;
+        const currentTeamCode = window.appUtils.currentTeamCode();
+        const today = window.appUtils.getTodayString();
+
+        try {
+            // Reference to the member's score document in subcollection
+            const memberScoreRef = db.collection('scores')
+                .doc(today)
+                .collection(currentTeamCode)
+                .doc(memberId);
+
+            // Get current scores or initialize empty
+            const currentDoc = await memberScoreRef.get();
+            const currentData = currentDoc.exists ? currentDoc.data() : {};
+            const currentScores = currentData.scores || {};
+
+            // Update the specific product score
+            const updatedScores = {
+                ...currentScores,
+                [product]: score
+            };
+
+            // Save back to Firestore
+            await memberScoreRef.set({
+                scores: updatedScores,
+                reviewedScores: currentData.reviewedScores || {},
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                teamCode: currentTeamCode
+            }, { merge: true });
+
+            // Update cache
+            if (!this.currentScoresCache[memberId]) {
+                this.currentScoresCache[memberId] = { scores: {}, reviewedScores: {} };
+            }
+            this.currentScoresCache[memberId].scores = updatedScores;
+
+            return true;
+
+        } catch (error) {
+            console.error('Error saving member score:', error);
+            throw error;
+        }
+    },
+
     // Render Members Table with both scores and reviewed scores
     async renderMembersTable() {
         const tbody = document.getElementById('membersTable');
         if (!tbody) return;
 
-        const teamMembers = window.appUtils.teamMembers();
+        const teamMembers = this.teamMembersCache || window.appUtils.teamMembers();
         const currentLanguage = window.appUtils.currentLanguage();
         const { products } = window.appUtils;
-        tbody.innerHTML = '';
 
-        // Load all daily scores first
-        const dailyScores = {};
-        for (const member of teamMembers) {
-            dailyScores[member.id] = await window.appUtils.loadDailyScores(member.id, window.appUtils.currentTeamCode(), window.appUtils.getTodayString());
+        if (!teamMembers || teamMembers.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="${products.length + 3}" style="text-align: center; padding: 20px;">
+                        ${currentLanguage === 'ar' ? 'لا توجد أعضاء' : 'No members found'}
+                    </td>
+                </tr>
+            `;
+            return;
         }
 
+        tbody.innerHTML = '';
+
+        // Load today's scores using the new method
+        const dailyScoresMap = await this.loadTodayScores();
+
         teamMembers.forEach(member => {
-            const data = dailyScores[member.id];
+            const data = dailyScoresMap[member.id] || { scores: {}, reviewedScores: {} };
             const row = document.createElement('tr');
-            const regularScores = data?.scores || {};
-            const reviewedScores = data?.reviewedScores || {};
-            const effectiveScores = data ? window.scoreUtils.getEffectiveScores(data) : {};
-            const total = data ? window.scoreUtils.calculateTotalScore(data) : 0;
+            const regularScores = data.scores || {};
+            const reviewedScores = data.reviewedScores || {};
+            const effectiveScores = window.scoreUtils.getEffectiveScores(data);
+            const total = window.scoreUtils.calculateTotalScore(data);
 
             // Check if reviewed scores exist
             const hasReviewedScores = Object.values(reviewedScores).some(score => score > 0);
@@ -68,7 +158,7 @@ const DashboardModule = {
                             <input type="number" 
                                    class="score-input" 
                                    value="${regularScore}"
-                                   onchange="updateMemberScore('${member.id}', '${product}', this.value)"
+                                   onchange="window.modules.dashboard.updateMemberScore('${member.id}', '${product}', this.value)"
                                    min="0">
                             ${hasReviewedScores ? `
                                 <div class="reviewed-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
@@ -87,8 +177,8 @@ const DashboardModule = {
                     ` : ''}
                 </td>
                 <td class="action-btns">
-                    <button data-en="Edit" data-ar="تعديل" class="edit-btn" onclick="editMember('${member.id}')">${currentLanguage === 'ar' ? 'تعديل' : 'Edit'}</button>
-                    <button data-en="Delete" data-ar="حذف" class="delete-btn" onclick="deleteMember('${member.id}')">${currentLanguage === 'ar' ? 'حذف' : 'Delete'}</button>
+                    <button data-en="Edit" data-ar="تعديل" class="edit-btn" onclick="window.modules.dashboard.editMember('${member.id}')">${currentLanguage === 'ar' ? 'تعديل' : 'Edit'}</button>
+                    <button data-en="Delete" data-ar="حذف" class="delete-btn" onclick="window.modules.dashboard.deleteMember('${member.id}')">${currentLanguage === 'ar' ? 'حذف' : 'Delete'}</button>
                 </td>
             `;
             tbody.appendChild(row);
@@ -108,27 +198,24 @@ const DashboardModule = {
             const newMember = {
                 name: name.trim(),
                 teamCode: currentTeamCode,
-                scores: {
-                    securedLoan: 0,
-                    securedCreditCard: 0,
-                    unsecuredLoan: 0,
-                    unsecuredCreditCard: 0,
-                    bancassurance: 0
-                },
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             const docRef = await db.collection('teamMembers').add(newMember);
 
-            // Update local array
-            const teamMembers = window.appUtils.teamMembers();
-            teamMembers.push({
+            // Update local cache
+            if (!this.teamMembersCache) {
+                this.teamMembersCache = [];
+            }
+            this.teamMembersCache.push({
                 id: docRef.id,
                 ...newMember
             });
-            window.appUtils.setTeamMembers(teamMembers);
 
-            this.renderMembersTable();
+            // Update global state
+            window.appUtils.setTeamMembers(this.teamMembersCache);
+
+            await this.renderMembersTable();
         } catch (error) {
             console.error('Error adding member:', error);
             alert(currentLanguage === 'ar' ? 'خطأ في إضافة العضو' : 'Error adding member');
@@ -137,7 +224,7 @@ const DashboardModule = {
 
     // Edit Member
     editMember(memberId) {
-        const teamMembers = window.appUtils.teamMembers();
+        const teamMembers = this.teamMembersCache || window.appUtils.teamMembers();
         const currentLanguage = window.appUtils.currentLanguage();
 
         const member = teamMembers.find(m => m.id === memberId);
@@ -165,35 +252,50 @@ const DashboardModule = {
         try {
             await db.collection('teamMembers').doc(memberId).delete();
 
-            // Update local array
+            // Update local cache
+            if (this.teamMembersCache) {
+                this.teamMembersCache = this.teamMembersCache.filter(m => m.id !== memberId);
+            }
+
+            // Update global state
             const teamMembers = window.appUtils.teamMembers();
             const updatedMembers = teamMembers.filter(m => m.id !== memberId);
             window.appUtils.setTeamMembers(updatedMembers);
 
-            this.renderMembersTable();
+            // Remove from scores cache
+            if (this.currentScoresCache && this.currentScoresCache[memberId]) {
+                delete this.currentScoresCache[memberId];
+            }
+
+            await this.renderMembersTable();
         } catch (error) {
             console.error('Error deleting member:', error);
         }
     },
 
-    // Update Member Score
-    async updateMemberScore(memberId, product, score) {       
+    // Update Member Score (optimized for subcollection structure)
+    async updateMemberScore(memberId, product, score) {
         try {
             const numScore = parseInt(score) || 0;
 
-            await window.appUtils.saveDailyScores(memberId, window.appUtils.currentTeamCode(), window.appUtils.getTodayString(), product, numScore);   
-           
-            // Update local data
-            const teamMembers = window.appUtils.teamMembers();
-            const member = teamMembers.find(m => m.id === memberId);
-            if (member) {
-                if (!member.scores) member.scores = {};
-                member.scores[product] = numScore;
+            // Use the new subcollection-based save method
+            await this.saveMemberScore(memberId, product, numScore);
+
+            // Update local data in team members cache
+            if (this.teamMembersCache) {
+                const member = this.teamMembersCache.find(m => m.id === memberId);
+                if (member) {
+                    if (!member.scores) member.scores = {};
+                    member.scores[product] = numScore;
+                }
             }
 
-            this.renderMembersTable();
+            // Re-render table to show updated scores
+            await this.renderMembersTable();
         } catch (error) {
             console.error('Error updating score:', error);
+            const currentLanguage = window.appUtils.currentLanguage();
+            alert(currentLanguage === 'ar' ? 'خطأ في تحديث النقاط' : 'Error updating score');
         }
     },
 
@@ -207,16 +309,39 @@ const DashboardModule = {
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // Update local data
+            // Update local cache
+            if (this.teamMembersCache) {
+                const member = this.teamMembersCache.find(m => m.id === memberId);
+                if (member) {
+                    member.name = name;
+                }
+            }
+
+            // Update global state
             const teamMembers = window.appUtils.teamMembers();
             const member = teamMembers.find(m => m.id === memberId);
             if (member) {
                 member.name = name;
             }
 
-            this.renderMembersTable();
+            await this.renderMembersTable();
         } catch (error) {
             console.error('Error updating member name:', error);
+        }
+    },
+
+    // Clear caches when switching teams or refreshing
+    clearCache() {
+        this.teamMembersCache = null;
+        this.currentScoresCache = null;
+    },
+
+    // Refresh dashboard data
+    async refreshDashboard() {
+        this.clearCache();
+        const currentTeamCode = window.appUtils.currentTeamCode();
+        if (currentTeamCode) {
+            await this.loadTeamMembers(currentTeamCode);
         }
     }
 };

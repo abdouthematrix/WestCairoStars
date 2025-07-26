@@ -140,7 +140,7 @@ async function loadPageModules(page) {
     switch (page) {
         case 'leaderboard':
             const leaderboardModule = await window.moduleLoader.loadModule('leaderboard');
-            await leaderboardModule.loadLeaderboards();
+            await leaderboardModule.initializeLeaderboard();
             break;
 
         case 'dashboard':
@@ -286,80 +286,336 @@ window.appUtils = {
     getTodayString() {
         const today = new Date();
         return today.toISOString().split('T')[0];
+    },   
+    getYesterdayString() {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        return yesterday.toISOString().split('T')[0];
     },
-    async saveDailyScores(memberId, TeamCode, date, product, numScore) {
+    // Caching system for daily scores
+    _dailyScoresCache: new Map(),
+    _cacheExpiry: 5 * 60 * 1000, // 5 minutes
+    // Generate cache key
+    _getCacheKey(memberId, teamCode, date) {
+        return `${date}-${teamCode}-${memberId}`;
+    },
+    // Check if cache is valid
+    _isCacheValid(cacheEntry) {
+        return cacheEntry && (Date.now() - cacheEntry.timestamp < this._cacheExpiry);
+    },
+
+    // Clear cache for specific date/team
+    clearScoresCache(date = null, teamCode = null) {
+        if (!date && !teamCode) {
+            this._dailyScoresCache.clear();
+            return;
+        }
+
+        const keysToDelete = [];
+        for (const key of this._dailyScoresCache.keys()) {
+            if (date && teamCode && key.startsWith(`${date}-${teamCode}-`)) {
+                keysToDelete.push(key);
+            } else if (date && key.startsWith(`${date}-`)) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => this._dailyScoresCache.delete(key));
+    },
+
+    // Batch load daily scores for multiple members
+    async loadBatchDailyScores(memberIds, teamCode, date) {
+        const { db } = window.appUtils;
+        const results = {};
+        const uncachedMemberIds = [];
+
+        // Check cache first
+        for (const memberId of memberIds) {
+            const cacheKey = this._getCacheKey(memberId, teamCode, date);
+            const cached = this._dailyScoresCache.get(cacheKey);
+
+            if (this._isCacheValid(cached)) {
+                results[memberId] = cached.data;
+            } else {
+                uncachedMemberIds.push(memberId);
+            }
+        }
+
+        // Load uncached data in batch
+        if (uncachedMemberIds.length > 0) {
+            try {
+                const collectionRef = db.collection('scores').doc(date).collection(teamCode);
+
+                // Firestore 'in' queries are limited to 10 items, so we might need to batch
+                const batches = [];
+                for (let i = 0; i < uncachedMemberIds.length; i += 10) {
+                    batches.push(uncachedMemberIds.slice(i, i + 10));
+                }
+
+                for (const batch of batches) {
+                    const snapshot = await collectionRef.where('__name__', 'in', batch).get();
+
+                    // Process results and update cache
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const result = {
+                            scores: data?.scores || {},
+                            reviewedScores: data?.reviewedScores || {}
+                        };
+
+                        results[doc.id] = result;
+
+                        // Cache the result
+                        const cacheKey = this._getCacheKey(doc.id, teamCode, date);
+                        this._dailyScoresCache.set(cacheKey, {
+                            data: result,
+                            timestamp: Date.now()
+                        });
+                    });
+
+                    // Add empty results for members with no data
+                    batch.forEach(memberId => {
+                        if (!results[memberId]) {
+                            const emptyResult = {
+                                scores: {},
+                                reviewedScores: {}
+                            };
+                            results[memberId] = emptyResult;
+
+                            const cacheKey = this._getCacheKey(memberId, teamCode, date);
+                            this._dailyScoresCache.set(cacheKey, {
+                                data: emptyResult,
+                                timestamp: Date.now()
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error in batch loading daily scores:', error);
+                // Return empty objects for failed loads
+                uncachedMemberIds.forEach(memberId => {
+                    if (!results[memberId]) {
+                        results[memberId] = { scores: {}, reviewedScores: {} };
+                    }
+                });
+            }
+        }
+
+        return results;
+    },
+
+    // Enhanced single member load with caching
+    async loadDailyScores(memberId, teamCode, date) {
+        if (!memberId || !teamCode || !date) {
+            return { scores: {}, reviewedScores: {} };
+        }
+
+        // Check cache first
+        const cacheKey = this._getCacheKey(memberId, teamCode, date);
+        const cached = this._dailyScoresCache.get(cacheKey);
+
+        if (this._isCacheValid(cached)) {
+            return cached.data;
+        }
+
+        // Load from Firestore
         const { db } = window.appUtils;
         try {
             const docRef = db
                 .collection('scores')
                 .doc(date)
-                .collection(TeamCode)
-                .doc(memberId);
-            // Update or create today's score document
-            await db.collection('scores')                // Root: "scores"
-                .doc(date)                              // Document: today's date (e.g., "2025-07-26")
-                .collection(TeamCode)             // Subcollection: team code (e.g., "Team123")
-                .doc(memberId)                           // Document: member ID (e.g., "johnDoe")
-                .set({
-                    scores: {
-                        [product]: numScore              // Dynamically set e.g. "securedLoan": 12
-                    },
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });                     // Merge to preserve existing scores
-        } catch (error) {
-            console.error('Error saving daily scores:', error);
-            return null;
-        }
-    },
-    async saveDailyreviewedScores(memberId, TeamCode, date, product, numScore) {
-        const { db } = window.appUtils;
-        try {
-            const docRef = db
-                .collection('scores')
-                .doc(date)
-                .collection(TeamCode)
-                .doc(memberId);
-            // Update or create today's score document
-            await db.collection('scores')                // Root: "scores"
-                .doc(date)                              // Document: today's date (e.g., "2025-07-26")
-                .collection(TeamCode)             // Subcollection: team code (e.g., "Team123")
-                .doc(memberId)                           // Document: member ID (e.g., "johnDoe")
-                .set({
-                    reviewedScores: {
-                        [product]: numScore              // Dynamically set e.g. "securedLoan": 12
-                    },
-                    reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });                     // Merge to preserve existing scores
-        } catch (error) {
-            console.error('Error saving daily reviewed scores:', error);
-            return null;
-        }
-    },
-    // Add new method to load daily scores
-    async loadDailyScores(memberId, TeamCode, date) {
-        const { db } = window.appUtils;       
-        try {
-            if (!memberId || !TeamCode || !date)
-                return {};
-            const docRef = db
-                .collection('scores')
-                .doc(date)
-                .collection(TeamCode)
+                .collection(teamCode)
                 .doc(memberId);
 
             const snapshot = await docRef.get();
 
-            if (!snapshot.exists) return null;
+            const result = snapshot.exists
+                ? {
+                    scores: snapshot.data()?.scores || {},
+                    reviewedScores: snapshot.data()?.reviewedScores || {}
+                }
+                : { scores: {}, reviewedScores: {} };
 
-            const data = snapshot.data();
-            return {
-                scores: data?.scores || {},
-                reviewedScores: data?.reviewedScores || {}
-            };
+            // Cache the result
+            this._dailyScoresCache.set(cacheKey, {
+                data: result,
+                timestamp: Date.now()
+            });
+
+            return result;
         } catch (error) {
             console.error('Error loading daily scores:', error);
-            return null;
+            return { scores: {}, reviewedScores: {} };
         }
+    },
+
+    // Enhanced save with cache invalidation
+    async saveDailyScores(memberId, teamCode, date, product, numScore) {
+        const { db } = window.appUtils;
+        try {
+            await db.collection('scores')
+                .doc(date)
+                .collection(teamCode)
+                .doc(memberId)
+                .set({
+                    scores: {
+                        [product]: numScore
+                    },
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+            // Invalidate cache for this member
+            const cacheKey = this._getCacheKey(memberId, teamCode, date);
+            this._dailyScoresCache.delete(cacheKey);
+
+            return true;
+        } catch (error) {
+            console.error('Error saving daily scores:', error);
+            return false;
+        }
+    },
+
+    // Enhanced save reviewed scores with cache invalidation
+    async saveDailyreviewedScores(memberId, teamCode, date, product, numScore) {
+        const { db } = window.appUtils;
+        try {
+            await db.collection('scores')
+                .doc(date)
+                .collection(teamCode)
+                .doc(memberId)
+                .set({
+                    reviewedScores: {
+                        [product]: numScore
+                    },
+                    reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+            // Invalidate cache for this member
+            const cacheKey = this._getCacheKey(memberId, teamCode, date);
+            this._dailyScoresCache.delete(cacheKey);
+
+            return true;
+        } catch (error) {
+            console.error('Error saving daily reviewed scores:', error);
+            return false;
+        }
+    },
+
+    // Batch save scores (useful for admin operations)
+    async saveBatchDailyScores(updates, date) {
+        const { db } = window.appUtils;
+        const batch = db.batch();
+
+        try {
+            updates.forEach(({ memberId, teamCode, product, score, isReviewed = false }) => {
+                const docRef = db.collection('scores')
+                    .doc(date)
+                    .collection(teamCode)
+                    .doc(memberId);
+
+                const updateData = isReviewed
+                    ? {
+                        reviewedScores: { [product]: score },
+                        reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }
+                    : {
+                        scores: { [product]: score },
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                batch.set(docRef, updateData, { merge: true });
+
+                // Invalidate cache
+                const cacheKey = this._getCacheKey(memberId, teamCode, date);
+                this._dailyScoresCache.delete(cacheKey);
+            });
+
+            await batch.commit();
+            return true;
+        } catch (error) {
+            console.error('Error in batch save:', error);
+            return false;
+        }
+    },
+
+    // Get scores for date range (useful for analytics)
+    async loadScoresForDateRange(teamCode, startDate, endDate, memberIds = null) {
+        const { db } = window.appUtils;
+        const results = {};
+
+        try {
+            // Get all dates in range
+            const dates = this._getDateRange(startDate, endDate);
+
+            for (const date of dates) {
+                const collectionRef = db.collection('scores').doc(date).collection(teamCode);
+                let query = collectionRef;
+
+                // If specific members requested, filter by them
+                if (memberIds && memberIds.length > 0) {
+                    // Handle batching for 'in' queries (limit of 10)
+                    const batches = [];
+                    for (let i = 0; i < memberIds.length; i += 10) {
+                        batches.push(memberIds.slice(i, i + 10));
+                    }
+
+                    for (const batch of batches) {
+                        const snapshot = await query.where('__name__', 'in', batch).get();
+                        snapshot.forEach(doc => {
+                            const memberId = doc.id;
+                            if (!results[memberId]) results[memberId] = {};
+                            results[memberId][date] = {
+                                scores: doc.data()?.scores || {},
+                                reviewedScores: doc.data()?.reviewedScores || {}
+                            };
+                        });
+                    }
+                } else {
+                    // Get all members for this date
+                    const snapshot = await query.get();
+                    snapshot.forEach(doc => {
+                        const memberId = doc.id;
+                        if (!results[memberId]) results[memberId] = {};
+                        results[memberId][date] = {
+                            scores: doc.data()?.scores || {},
+                            reviewedScores: doc.data()?.reviewedScores || {}
+                        };
+                    });
+                }
+            }
+
+            return results;
+        } catch (error) {
+            console.error('Error loading date range scores:', error);
+            return {};
+        }
+    },
+
+    // Helper function to generate date range
+    _getDateRange(startDate, endDate) {
+        const dates = [];
+        const current = new Date(startDate);
+        const end = new Date(endDate);
+
+        while (current <= end) {
+            dates.push(current.toISOString().split('T')[0]);
+            current.setDate(current.getDate() + 1);
+        }
+
+        return dates;
+    },
+
+    // Clean up old cache entries periodically
+    cleanupCache() {
+        const now = Date.now();
+        const keysToDelete = [];
+
+        for (const [key, entry] of this._dailyScoresCache.entries()) {
+            if (now - entry.timestamp > this._cacheExpiry) {
+                keysToDelete.push(key);
+            }
+        }
+
+        keysToDelete.forEach(key => this._dailyScoresCache.delete(key));
     }
 };
 
@@ -518,6 +774,10 @@ async function initializeApp() {
         }
         updateAuthUI(currentUser);
     }, 500); // Delay by 2 seconds
+    // Auto cleanup cache every 10 minutes
+    setInterval(() => {
+        window.appUtils.cleanupCache();
+    }, 10 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);

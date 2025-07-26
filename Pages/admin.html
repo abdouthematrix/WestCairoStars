@@ -1,10 +1,50 @@
-<div class="header">
-  <div class="header-content">
-    <div class="logo" data-en="Admin Dashboard" data-ar="لوحة تحكم المشرف">لوحة تحكم المشرف</div>    
-  </div>
+<div class="dashboard-header">
+    <span class="team-info">
+        <span data-en="Admin Dashboard" data-ar="لوحة تحكم المشرف">
+            لوحة تحكم المشرف
+        </span>
+    </span>
 </div>
 <div id="admin-view">
-  <div id="admin-teams-container">
-    <!-- All teams and their members will be rendered here by script.js -->
-  </div>
-</div> 
+    <!-- Date Filter Section -->
+    <div id="admin-date-filters-container" class="date-filters-container admin-date-filters">
+        <div class="date-filters-header">
+            <h3 data-en="Review Date" data-ar="تاريخ المراجعة">تاريخ المراجعة</h3>
+            <div class="current-date-display" id="admin-current-date-display">
+                <span data-en="Reviewing:" data-ar="مراجعة:">مراجعة:</span>
+                <strong id="admin-selected-date-text">اليوم</strong>
+            </div>
+        </div>
+
+        <div class="date-filter-buttons">
+            <button class="filter-btn active" id="admin-filter-today"
+                    onclick="window.modules.admin.setReviewDate('today')"
+                    data-en="Today" data-ar="اليوم">
+                اليوم
+            </button>
+
+            <button class="filter-btn" id="admin-filter-yesterday"
+                    onclick="window.modules.admin.setReviewDate('yesterday')"
+                    data-en="Yesterday" data-ar="أمس">
+                أمس
+            </button>
+
+            <button class="filter-btn" id="admin-filter-custom"
+                    onclick="window.modules.admin.setReviewDate('custom')"
+                    data-en="Custom Date" data-ar="تاريخ مخصص">
+                تاريخ مخصص
+            </button>
+        </div>
+
+        <div class="date-range-picker hidden" id="admin-date-picker">
+            <div class="date-input-group">
+                <label data-en="Select Date:" data-ar="اختر التاريخ:">اختر التاريخ:</label>
+                <input type="date" id="admin-custom-date" onchange="window.modules.admin.applyCustomDate()">
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-teams-container">
+        <!-- All teams and their members will be rendered here by script.js -->
+    </div>
+</div>
