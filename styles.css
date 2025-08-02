@@ -437,6 +437,28 @@ body {
     margin-top: var(--spacing-xs);
 }
 
+/* member photo*/
+.member-photo {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.upload-image-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 8px;
+}
+
+    .upload-image-btn:hover {
+        background: #2563eb;
+    }
+/* member photo*/
+
+
 .score-input {
     width: 80px;
     padding: var(--spacing-xs) var(--spacing-sm);
@@ -1257,16 +1279,7 @@ body {
     will-change: transform;
 }
 
-/* ============================ MISSING CSS STYLES ============================ */
-
 /* ============================ Leaderboard Grid Layout ============================ */
-.leaderboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: var(--spacing-xl);
-    margin: var(--spacing-xl) 0;
-}
-
 .leaderboard-card {
     background: var(--background-primary);
     border-radius: var(--radius-lg);
@@ -1671,12 +1684,7 @@ body {
     }
 
 /* ============================ Responsive Enhancements ============================ */
-@media (max-width: 768px) {
-    .leaderboard-grid {
-        grid-template-columns: 1fr;
-        gap: var(--spacing-lg);
-    }
-
+@media (max-width: 768px) {  
     #loginModal .modal-content {
         width: 95%;
         padding: var(--spacing-lg);
@@ -2052,5 +2060,335 @@ html[lang="ar"] .zero-score-table {
     }
 
 
+/* ============================ Full-Width Ribbon Styles ============================ */
+
+.ribbon {
+    font-size: 28px;
+    font-weight: bold;
+    color: #fff;
+    text-align: center;
+}
+
+.ribbon-full-width {
+    --s: 1.8em; /* the ribbon size */
+    --d: .6em; /* the depth */
+    --c: .8em; /* the cutout part */
+    /* Make it full width */
+    width: 100%;
+    max-width: 100%;
+    padding: 0 calc(var(--s) + 2*var(--d) + .5em) var(--d);
+    line-height: 1.8;
+    background: linear-gradient(90deg,#0004 var(--d),#0000 0 calc(100% - var(--d)),#0004 0) 50% 0/calc(100% - 2*(var(--s) + var(--d))) calc(100% - var(--d)), conic-gradient(from 135deg at 50% -50%,#0004 25%,#0008 0) var(--s) 100%/calc(3*var(--d)) var(--d), conic-gradient(from 135deg at 50% -50%,#0004 25%,#0008 0) calc(100% - var(--s)) 100%/calc(3*var(--d)) var(--d);
+    background-repeat: no-repeat;
+    background-color: #CC333F; /* the main color */
+    clip-path: polygon(0 0,calc(var(--s) + var(--d)) 0,calc(var(--s) + var(--d)) var(--d),calc(var(--s) + 2*var(--d)) var(--d),calc(var(--s) + 2*var(--d)) 0,calc(100% - var(--s) - 2*var(--d)) 0,calc(100% - var(--s) - 2*var(--d)) var(--d),calc(100% - var(--s) - var(--d)) var(--d),calc(100% - var(--s) - var(--d)) 0,100% 0,calc(100% - var(--c)) calc(50% - var(--d)/2),100% calc(100% - var(--d)),calc(100% - var(--s)) calc(100% - var(--d)),calc(100% - var(--s)) 100%,calc(100% - var(--s) - 3*var(--d)) 100%,calc(100% - var(--s) - 3*var(--d)) calc(100% - var(--d)),calc(var(--s) + 3*var(--d)) calc(100% - var(--d)),calc(var(--s) + 3*var(--d)) 100%,var(--s) 100%,var(--s) calc(100% - var(--d)),0 calc(100% - var(--d)),var(--c) calc(50% - var(--d)/2));
+    /* Center the text */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    /* Add some margin for spacing */
+    margin: 0 auto var(--spacing-lg);
+    /* Ensure text is readable */
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* Small ribbon for member info */
+.ribbon-small {
+    --s: 1.2em; /* smaller ribbon size */
+    --d: .4em; /* smaller depth */
+    --c: .6em; /* smaller cutout */
+
+    font-size: 18px;
+    font-weight: 600;
+    padding: 0 calc(var(--s) + 2*var(--d) + .3em) var(--d);
+    line-height: 1.6;
+    background: linear-gradient(90deg,#0004 var(--d),#0000 0 calc(100% - var(--d)),#0004 0) 50% 0/calc(100% - 2*(var(--s) + var(--d))) calc(100% - var(--d)), conic-gradient(from 135deg at 50% -50%,#0004 25%,#0008 0) var(--s) 100%/calc(3*var(--d)) var(--d), conic-gradient(from 135deg at 50% -50%,#0004 25%,#0008 0) calc(100% - var(--s)) 100%/calc(3*var(--d)) var(--d);
+    background-repeat: no-repeat;
+    background-color: #CC333F;
+    clip-path: polygon(0 0,calc(var(--s) + var(--d)) 0,calc(var(--s) + var(--d)) var(--d),calc(var(--s) + 2*var(--d)) var(--d),calc(var(--s) + 2*var(--d)) 0,calc(100% - var(--s) - 2*var(--d)) 0,calc(100% - var(--s) - 2*var(--d)) var(--d),calc(100% - var(--s) - var(--d)) var(--d),calc(100% - var(--s) - var(--d)) 0,100% 0,calc(100% - var(--c)) calc(50% - var(--d)/2),100% calc(100% - var(--d)),calc(100% - var(--s)) calc(100% - var(--d)),calc(100% - var(--s)) 100%,calc(100% - var(--s) - 3*var(--d)) 100%,calc(100% - var(--s) - 3*var(--d)) calc(100% - var(--d)),calc(var(--s) + 3*var(--d)) calc(100% - var(--d)),calc(var(--s) + 3*var(--d)) 100%,var(--s) 100%,var(--s) calc(100% - var(--d)),0 calc(100% - var(--d)),var(--c) calc(50% - var(--d)/2));
+    width: fit-content;
+    max-width: 280px;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* Ribbon Leaderboard Styles */
+.ribbon-leaderboard {
+    background: var(--background-primary);
+    border-radius: 15px;
+    box-shadow: var(--shadow-lg);
+    overflow: visible; /* Allow ribbon to extend beyond bounds */
+    animation: fadeIn 0.5s ease;
+    transition: all var(--transition-normal);
+    margin-bottom: var(--spacing-xl);
+    padding-top: 20px; /* Space for the ribbon */
+}
+
+    .ribbon-leaderboard:hover {
+        box-shadow: var(--shadow-xl);
+        transform: translateY(-3px);
+    }
+
+/* Ribbon Leaderboard Content - Updated for side-by-side cards */
+.ribbon-leaderboard-content {
+    padding: 30px;
+    background: var(--background-primary);
+    border-radius: 0 0 15px 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+/* Member Cards - Updated for side-by-side layout */
+.ribbon-member-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 25px;
+    margin-bottom: 0; /* Remove margin since grid handles spacing */
+    border-radius: 15px;
+    position: relative;
+    transition: all 0.3s ease;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    width: 100%; /* Take full width of grid cell */
+}
+
+    .ribbon-member-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Ranking-based styling */
+    .ribbon-member-card.rank-1 {
+        background: linear-gradient(135deg, #fef3c7, #fbbf24);
+        border: 3px solid #d97706;
+        color: #7c2d12;
+    }
+
+    .ribbon-member-card.rank-2 {
+        background: linear-gradient(135deg, #f1f5f9, #cbd5e1);
+        border: 3px solid #64748b;
+        color: #374151;
+    }
+
+    .ribbon-member-card.rank-3 {
+        background: linear-gradient(135deg, #fed7aa, #ea580c);
+        border: 3px solid #c2410c;
+        color: #7c2d12;
+    }
+
+    .ribbon-member-card.rank-other {
+        background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+        border: 2px solid #cbd5e1;
+        color: var(--text-primary);
+    }
+
+/* Position Badge */
+.ribbon-position-badge {
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    background: #1e40af;
+    color: white;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 5;
+}
+
+    .ribbon-position-badge.rank-1 {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .ribbon-position-badge.rank-2 {
+        background: linear-gradient(135deg, #6b7280, #4b5563);
+    }
+
+    .ribbon-position-badge.rank-3 {
+        background: linear-gradient(135deg, #ea580c, #c2410c);
+    }
+
+/* Member Image - Back to vertical card layout */
+.ribbon-member-image {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid white;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+.ribbon-member-card:hover .ribbon-member-image {
+    transform: scale(1.1);
+}
+
+/* Member Info Container - Back to centered layout */
+.member-info-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    text-align: center;
+}
+
+.member-name-display {
+    font-size: 1rem;
+    font-weight: 600;
+    color: inherit;
+    text-align: center;
+    margin: 0;
+}
+
+.member-score-display {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: inherit;
+    text-align: center;
+    margin: 0;
+}
+
+/* Trophy Icons */
+.ribbon-trophy-icon {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    font-size: 2rem;
+    z-index: 5;
+    animation: bounce 2s infinite;
+}
+
+/* Color variations for different sections */
+.ribbon-achievers {
+    background-color: #CC333F; /* Red for top achievers */
+}
+
+.ribbon-leaders {
+    background-color: #2563eb; /* Blue for team leaders */
+}
+
+.ribbon-teams {
+    background-color: #059669; /* Green for top teams */
+}
+
+/* RTL Support */
+[dir="rtl"] .ribbon-position-badge {
+    left: auto;
+    right: -15px;
+}
+
+[dir="rtl"] .ribbon-trophy-icon {
+    right: auto;
+    left: -10px;
+}
+
+/* Responsive Design Updates for leaderboard content */
+@media (max-width: 768px) {
+    .ribbon-full-width {
+        font-size: 22px;
+        --s: 1.5em;
+        --d: .5em;
+        --c: .7em;
+    }
+
+    .ribbon-small {
+        font-size: 16px;
+        --s: 1em;
+        --d: .3em;
+        --c: .5em;
+        max-width: 240px;
+        min-width: 180px;
+    }
+
+    .ribbon-leaderboard-content {
+        padding: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+    }
+
+    .ribbon-member-card {
+        padding: 20px;
+    }
+
+    .ribbon-member-image {
+        width: 80px;
+        height: 80px;
+    }
+
+    .ribbon-position-badge {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .ribbon-full-width {
+        font-size: 18px;
+        --s: 1.2em;
+        --d: .4em;
+        --c: .6em;
+    }
+
+    .ribbon-small {
+        font-size: 14px;
+        --s: .8em;
+        --d: .25em;
+        --c: .4em;
+        max-width: 200px;
+        min-width: 150px;
+    }
+
+    .ribbon-leaderboard-content {
+        padding: 15px;
+        grid-template-columns: 1fr; /* Single column on very small screens */
+        gap: 15px;
+    }
+
+    .ribbon-member-card {
+        padding: 15px;
+    }
+
+    .ribbon-member-image {
+        width: 60px;
+        height: 60px;
+        border: 3px solid white;
+    }
+
+    .ribbon-position-badge {
+        width: 30px;
+        height: 30px;
+        font-size: 0.8rem;
+        top: -10px;
+        left: -10px;
+    }
+
+    .member-name-display {
+        font-size: 0.9rem;
+    }
+
+    .member-score-display {
+        font-size: 1.1rem;
+    }
+
+    [dir="rtl"] .ribbon-position-badge {
+        left: auto;
+        right: -10px;
+    }
+}
 
 

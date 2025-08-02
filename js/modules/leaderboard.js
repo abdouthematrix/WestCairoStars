@@ -215,7 +215,8 @@ const LeaderboardModule = {
         membersSnapshot.docs.forEach(doc => {
             this.memberDetailsCache[doc.id] = {
                 name: doc.data().name,
-                teamCode: doc.data().teamCode
+                teamCode: doc.data().teamCode,
+                image: doc.data().teamMemberImage
             };
         });
 
@@ -345,15 +346,16 @@ const LeaderboardModule = {
         try {
             const scoresData = await this.getAggregatedScores();
             const memberDetails = await this.getMemberDetails();
+            const teamsData = await this.getTeamsData();
 
             const achievers = Object.values(scoresData)
                 .map(member => {
                     const details = memberDetails[member.memberId];
                     if (!details) return null;
+                    const teamData = teamsData[details.teamCode];
 
                     // Use reviewed scores if available
-                    const hasReviewedScores = Object.values(member.totalReviewedScores).some(score => score > 0);
-                    const effectiveScores = hasReviewedScores ? member.totalReviewedScores : member.totalScores;
+                    const effectiveScores = member?.totalReviewedScores ?? member?.totalScores ?? {};
 
                     const productsWithScore = window.appUtils.products.filter(p => effectiveScores[p] > 0).length;
 
@@ -363,6 +365,8 @@ const LeaderboardModule = {
                             name: details.name,
                             score: totalScore,
                             teamCode: details.teamCode,
+                            team: teamData.name || details.teamCode,
+                            image: details.image,
                             productsCount: productsWithScore,
                             activeDays: member.activeDays
                         };
@@ -463,9 +467,8 @@ const LeaderboardModule = {
             const teamScores = {};
             Object.values(scoresData).forEach(member => {
                 const details = memberDetails[member.memberId];
-                if (!details) return;
-
-                const teamCode = details.teamCode;
+                if (!details) return;              
+                const teamCode = details.teamCode;               
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
                         members: [],
@@ -638,7 +641,7 @@ const LeaderboardModule = {
         }
     },
 
-    // Render leaderboard
+    // Update the renderLeaderboard function
     renderLeaderboard(containerId, data) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -647,28 +650,58 @@ const LeaderboardModule = {
 
         if (data.length === 0) {
             container.innerHTML = `
-                <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                    ${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data available'}
-                </p>
-            `;
+            <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                ${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data available'}
+            </p>
+        `;
             return;
         }
 
-        container.innerHTML = data.map((item, index) => {
-            const trophy = index === 0 ? '🏆' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
-            return `
+        // Check if this is a ribbon leaderboard (top-achievers or top-leaders)
+        const isRibbonLeaderboard = containerId === 'top-achievers' || containerId === 'top-leaders';
+
+        if (isRibbonLeaderboard) {
+            container.innerHTML = data.map((item, index) => {
+                const position = index + 1;
+                const trophy = position === 1 ? '🏆' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                const rankClass = position === 1 ? 'rank-1' : position === 2 ? 'rank-2' : position === 3 ? 'rank-3' : 'rank-other';
+                               
+                return `
+                <div class="ribbon-member-card ${rankClass}">
+                    <div class="ribbon-position-badge ${rankClass}">#${position}</div>
+                    ${trophy ? `<div class="ribbon-trophy-icon">${trophy}</div>` : ''}
+                    
+                    <img src="${item.image}" 
+                         class="ribbon-member-image"
+                         onerror="this.src=''">
+                    
+                    <div class="ribbon ribbon-small">
+                        <div class="member-info-container">
+                            <div class="member-name-display">${item.name}</div>
+                            <div class="member-score-display">${item.score}</div>
+                            <div class="member-name-display">${item.team}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        } else {
+            // Use the original rendering for other leaderboards
+            container.innerHTML = data.map((item, index) => {
+                const trophy = index === 0 ? '🏆' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `
                 <div class="leaderboard-item">
                     <span class="rank">#${index + 1}</span>
-                    <span class="name">${item.name}${item.team ? ` (${item.team})` : ''}</span>
-                    <span class="score">
-                        ${item.score} 
-                        <span class="trophy">${trophy}</span>
+                    <span class="name">${item.name}</span>                    
+                     <span class="score">${item.score}
+                          <span class="trophy">${trophy}
+                     </span>
                     </span>
                 </div>
             `;
-        }).join('');
+            }).join('');
+        }
     },
-
     // Render error state
     renderErrorLeaderboard(containerId) {
         const container = document.getElementById(containerId);

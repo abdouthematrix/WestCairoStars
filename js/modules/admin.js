@@ -334,46 +334,57 @@ const AdminModule = {
     // Render member rows for the team table
     renderMemberRows(members, scores, teamId, isAdminTeam, isTodayOrYesterday) {
         const { products } = window.appUtils;
+        const currentLanguage = window.appUtils.currentLanguage();
 
         return members.map(member => {
             const memberId = member.id;
             const memberScores = scores[memberId] || {};
             const reviewedScores = memberScores.reviewedScores || {};
             const originalScores = memberScores.scores || {};
-
             // Calculate total from reviewed scores
             const total = Object.values(reviewedScores).reduce((sum, score) => {
                 return sum + (parseInt(score) || 0);
             }, 0);
 
             return `
-                <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''}">
-                    <td>${member.name}</td>
-                    ${products.map(product => `
-                        <td>
-                            <input type="number" 
-                                   min="0" 
-                                   class="score-input" 
-                                   value="${reviewedScores[product] || ''}" 
-                                   id="reviewed-${memberId}-${product}"
-                                   ${isAdminTeam || !isTodayOrYesterday ? 'disabled' : ''}
-                                   ${isTodayOrYesterday && !isAdminTeam ? `onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)"` : ''}>
-                            <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
-                                Original: ${originalScores[product] || '0'}
-                            </div>   
-                        </td>
-                    `).join('')}
-                    <td><strong>${total}</strong></td>
-                    <td class="action-btns">
-                        ${!isAdminTeam ? `
-                            <button class="edit-btn btn-small" onclick="editMemberName('${memberId}', '${member.name}')" data-en="Edit" data-ar="تعديل">تعديل</button>
-                            <button class="delete-btn btn-small" onclick="removeMemberFromTeam('${memberId}', '${member.name}')" data-en="Remove" data-ar="حذف">حذف</button>
-                        ` : `
-                            <span class="admin-protected" data-en="Protected" data-ar="محمي">محمي</span>
-                        `}
+            <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''}">
+                <td class="member-photo">
+                    ${member.teamMemberImage ?
+                    `<img src="${member.teamMemberImage}" alt="${member.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">` :
+                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">${currentLanguage === 'ar' ? 'لا توجد صورة' : 'No Photo'}</div>`
+                }
+                    ${!isAdminTeam ? `
+                        <button class="upload-image-btn" onclick="uploadMemberImageAdmin('${memberId}')" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">
+                            ${currentLanguage === 'ar' ? 'رفع صورة' : 'Upload'}
+                        </button>
+                    ` : ''}
+                </td>
+                <td>${member.name}</td>
+                ${products.map(product => `
+                    <td>
+                        <input type="number" 
+                               min="0" 
+                               class="score-input" 
+                               value="${reviewedScores[product] || ''}" 
+                               id="reviewed-${memberId}-${product}"
+                               ${isAdminTeam || !isTodayOrYesterday ? 'disabled' : ''}
+                               ${isTodayOrYesterday && !isAdminTeam ? `onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)"` : ''}>
+                        <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
+                            Original: ${originalScores[product] || '0'}
+                        </div>   
                     </td>
-                </tr>
-            `;
+                `).join('')}
+                <td><strong>${total}</strong></td>
+                <td class="action-btns">
+                    ${!isAdminTeam ? `
+                        <button class="edit-btn btn-small" onclick="editMemberName('${memberId}', '${member.name}')" data-en="Edit" data-ar="تعديل">تعديل</button>
+                        <button class="delete-btn btn-small" onclick="removeMemberFromTeam('${memberId}', '${member.name}')" data-en="Remove" data-ar="حذف">حذف</button>
+                    ` : `
+                        <span class="admin-protected" data-en="Protected" data-ar="محمي">محمي</span>
+                    `}
+                </td>
+            </tr>
+        `;
         }).join('');
     },
 
@@ -895,13 +906,80 @@ const AdminModule = {
             console.error('Error resetting team scores:', error);
             alert(currentLanguage === 'ar' ? 'خطأ في إعادة تعيين درجات الفريق' : 'Error resetting team scores');
         }
+    },
+    // Upload member image function for admin
+    async uploadMemberImageAdmin(memberId) {
+        const input = document.createElement('input');
+input.type = 'file';
+input.accept = 'image/*';
+
+input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (limit to 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        const currentLanguage = window.appUtils.currentLanguage();
+        alert(currentLanguage === 'ar' ? 'حجم الصورة كبير جداً (الحد الأقصى 2MB)' : 'Image size too large (max 2MB)');
+        return;
     }
+
+    try {
+        window.appUtils.showLoadingIndicator();
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const base64 = reader.result;
+                await saveMemberImageAdmin(memberId, base64);
+            } catch (error) {
+                console.error('Error saving image:', error);
+                const currentLanguage = window.appUtils.currentLanguage();
+                alert(currentLanguage === 'ar' ? 'خطأ في حفظ الصورة' : 'Error saving image');
+            }
+        };
+        reader.readAsDataURL(file);
+
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        const currentLanguage = window.appUtils.currentLanguage();
+        alert(currentLanguage === 'ar' ? 'خطأ في رفع الصورة' : 'Error uploading image');
+    } finally {
+        window.appUtils.hideLoadingIndicator();
+    }
+};
+
+input.click();
+    },
+    // Save member image to Firestore
+    async saveMemberImageAdmin(memberId, base64Image) {
+        const { db } = window.appUtils;
+
+    try {
+        await db.collection('teamMembers').doc(memberId).update({
+            teamMemberImage: base64Image,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        await this.loadAllTeamsForAdmin();
+
+        const currentLanguage = window.appUtils.currentLanguage();
+        alert(currentLanguage === 'ar' ? 'تم حفظ الصورة بنجاح' : 'Image saved successfully');
+
+    } catch (error) {
+        console.error('Error saving member image:', error);
+        throw error;
+    }
+}
 };
 
 // Register module globally
 window.modules = window.modules || {};
 window.modules.admin = AdminModule;
 
+// Make functions globally accessible
+window.uploadMemberImageAdmin = AdminModule.uploadMemberImageAdmin.bind(AdminModule);
+window.saveMemberImageAdmin = AdminModule.saveMemberImageAdmin.bind(AdminModule);
 // Make functions globally accessible for HTML onclick handlers
 window.createNewTeam = AdminModule.createNewTeam.bind(AdminModule);
 window.deleteTeam = AdminModule.deleteTeam.bind(AdminModule);

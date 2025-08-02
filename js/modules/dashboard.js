@@ -148,6 +148,15 @@ const DashboardModule = {
             const hasReviewedScores = Object.values(reviewedScores).some(score => score > 0);
 
             row.innerHTML = `
+    <td class="member-photo">
+        ${member.teamMemberImage ?
+                    `<img src="${member.teamMemberImage}" alt="${member.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">` :
+                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">${currentLanguage === 'ar' ? 'لا توجد صورة' : 'No Photo'}</div>`
+                }
+        <button class="upload-image-btn" onclick="window.modules.dashboard.uploadAndSaveMemberImage('${member.id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">
+            ${currentLanguage === 'ar' ? 'رفع صورة' : 'Upload'}
+        </button>
+    </td>
                 <td>${member.name}</td>
                 ${products.map(product => {
                 const regularScore = regularScores[product] || 0;
@@ -330,6 +339,88 @@ const DashboardModule = {
         }
     },
 
+    async uploadAndSaveMemberImage(memberId) {
+        try {
+            window.appUtils.showLoadingIndicator();
+            await this.uploadMemberImage(memberId);
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            const currentLanguage = window.appUtils.currentLanguage();
+            alert(currentLanguage === 'ar' ? 'خطأ في رفع الصورة' : 'Error uploading image');
+        } finally {
+            window.appUtils.hideLoadingIndicator();
+        }
+    },
+    async uploadMemberImage(memberId) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+
+        return new Promise((resolve, reject) => {
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) {
+                    resolve(null);
+                    return;
+                }
+
+                // Check file size (limit to 2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    const currentLanguage = window.appUtils.currentLanguage();
+                    alert(currentLanguage === 'ar' ? 'حجم الصورة كبير جداً (الحد الأقصى 2MB)' : 'Image size too large (max 2MB)');
+                    resolve(null);
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    try {
+                        const base64 = reader.result;
+                        await this.saveMemberImage(memberId, base64);
+                        resolve(base64);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            };
+
+            input.click();
+        });
+    },
+    async saveMemberImage(memberId, base64Image) {
+        const { db } = window.appUtils;
+
+        try {
+            await db.collection('teamMembers').doc(memberId).update({
+                teamMemberImage: base64Image,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Update local cache
+            if (this.teamMembersCache) {
+                const member = this.teamMembersCache.find(m => m.id === memberId);
+                if (member) {
+                    member.teamMemberImage = base64Image;
+                }
+            }
+
+            // Update global state
+            const teamMembers = window.appUtils.teamMembers();
+            const member = teamMembers.find(m => m.id === memberId);
+            if (member) {
+                member.teamMemberImage = base64Image;
+            }
+
+            await this.renderMembersTable();
+
+        } catch (error) {
+            console.error('Error saving member image:', error);
+            throw error;
+        }
+    },
+
     // Clear caches when switching teams or refreshing
     clearCache() {
         this.teamMembersCache = null;
@@ -351,6 +442,7 @@ window.modules = window.modules || {};
 window.modules.dashboard = DashboardModule;
 
 // Make functions globally accessible for HTML onclick handlers
+window.uploadAndSaveMemberImage = DashboardModule.uploadAndSaveMemberImage.bind(DashboardModule);
 window.addMember = DashboardModule.addMember.bind(DashboardModule);
 window.editMember = DashboardModule.editMember.bind(DashboardModule);
 window.deleteMember = DashboardModule.deleteMember.bind(DashboardModule);
