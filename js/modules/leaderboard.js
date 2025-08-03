@@ -1,4 +1,4 @@
-﻿// Leaderboard Module - Optimized for Subcollection Structure
+// Leaderboard Module - Optimized for Subcollection Structure
 // Firestore structure: scores/{date}/{teamId}/{memberId}
 
 const LeaderboardModule = {
@@ -242,7 +242,7 @@ const LeaderboardModule = {
         return this.teamsCache;
     },
 
-    // Get aggregated scores from subcollections
+    // Get aggregated scores from subcollections (with unavailable filtering)
     async getAggregatedScores() {
         const { db } = window.appUtils;
 
@@ -307,7 +307,8 @@ const LeaderboardModule = {
                         totalScores: {},
                         totalReviewedScores: {},
                         activeDays: new Set(),
-                        dates: new Set()
+                        dates: new Set(),
+                        unavailableDays: new Set()
                     };
                 }
 
@@ -346,7 +347,7 @@ const LeaderboardModule = {
         return aggregatedData;
     },
 
-    // Load Top Achievers
+    // Load Top Achievers (excluding unavailable members)
     async loadTopAchievers() {
         try {
             const scoresData = await this.getAggregatedScores();
@@ -391,7 +392,7 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Top Teams
+    // Load Top Teams (excluding unavailable members from calculations)
     async loadTopTeams() {
         try {
             const scoresData = await this.getAggregatedScores();
@@ -407,7 +408,7 @@ const LeaderboardModule = {
                 const teamCode = details.teamCode;
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
-                        members: [],
+                        availableMembers: [],
                         totalScore: 0
                     };
                 }
@@ -417,7 +418,7 @@ const LeaderboardModule = {
                     (sum, product) => sum + (effectiveScores[product] || 0), 0
                 );
 
-                teamScores[teamCode].members.push({
+                teamScores[teamCode].availableMembers.push({
                     ...details,
                     score: memberScore,
                     hasActivity: memberScore > 0
@@ -426,27 +427,31 @@ const LeaderboardModule = {
                 teamScores[teamCode].totalScore += memberScore;
             });
 
-            // Get total member counts per team
+            // Get total member counts per team (including unavailable)
             const teamMemberCounts = {};
             Object.values(memberDetails).forEach(member => {
                 const teamCode = member.teamCode;
                 teamMemberCounts[teamCode] = (teamMemberCounts[teamCode] || 0) + 1;
             });
 
-            // Process teams (only teams where ALL members are active)
+            // Process teams (only teams where ALL AVAILABLE members are active)
             const teams = [];
             Object.entries(teamScores).forEach(([teamId, teamScore]) => {
                 const teamData = teamsData[teamId];
                 const totalMembersInTeam = teamMemberCounts[teamId] || 0;
 
                 if (teamData && totalMembersInTeam > 0) {
-                    const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
+                    const activeMembersWithScores = teamScore.availableMembers.filter(m => m.hasActivity).length;
+                    const totalAvailableMembers = teamScore.availableMembers.length;
 
-                    if (activeMembersWithScores === totalMembersInTeam) {
+                    // Team qualifies if all available members have activity
+                    if (totalAvailableMembers > 0 && activeMembersWithScores === totalAvailableMembers) {
                         teams.push({
                             name: teamData.name || teamId,
                             score: teamScore.totalScore,
-                            membersCount: totalMembersInTeam
+                            membersCount: totalMembersInTeam,
+                            availableMembersCount: totalAvailableMembers,
+                            activeMembersCount: activeMembersWithScores
                         });
                     }
                 }
@@ -461,7 +466,7 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Top Team Leaders
+    // Load Top Team Leaders (excluding unavailable members from calculations)
     async loadTopTeamLeaders() {
         try {
             const scoresData = await this.getAggregatedScores();
@@ -476,7 +481,7 @@ const LeaderboardModule = {
                 const teamCode = details.teamCode;               
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
-                        members: [],
+                        availableMembers: [],
                         totalScore: 0
                     };
                 }
@@ -486,7 +491,7 @@ const LeaderboardModule = {
                     (sum, product) => sum + (effectiveScores[product] || 0), 0
                 );
 
-                teamScores[teamCode].members.push({
+                teamScores[teamCode].availableMembers.push({
                     ...details,
                     score: memberScore,
                     hasActivity: memberScore > 0
@@ -495,28 +500,32 @@ const LeaderboardModule = {
                 teamScores[teamCode].totalScore += memberScore;
             });
 
-            // Get total member counts per team
+            // Get total member counts per team (including unavailable)
             const teamMemberCounts = {};
             Object.values(memberDetails).forEach(member => {
                 const teamCode = member.teamCode;
                 teamMemberCounts[teamCode] = (teamMemberCounts[teamCode] || 0) + 1;
             });
 
-            // Process leaders (only teams where ALL members are active)
+            // Process leaders (only teams where ALL AVAILABLE members are active)
             const leaders = [];
             Object.entries(teamScores).forEach(([teamId, teamScore]) => {
                 const teamData = teamsData[teamId];
                 const totalMembersInTeam = teamMemberCounts[teamId] || 0;
 
                 if (teamData?.leader && totalMembersInTeam > 0) {
-                    const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
+                    const activeMembersWithScores = teamScore.availableMembers.filter(m => m.hasActivity).length;
+                    const totalAvailableMembers = teamScore.availableMembers.length;
 
-                    if (activeMembersWithScores === totalMembersInTeam) {
+                    // Leader qualifies if all available members have activity
+                    if (totalAvailableMembers > 0 && activeMembersWithScores === totalAvailableMembers) {
                         leaders.push({
                             name: teamData.leader,
                             team: teamData.name || teamId,
                             score: teamScore.totalScore,
-                            membersCount: totalMembersInTeam
+                            membersCount: totalMembersInTeam,
+                            availableMembersCount: totalAvailableMembers,
+                            activeMembersCount: activeMembersWithScores
                         });
                     }
                 }
@@ -531,10 +540,293 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Teams With Zero Scores
+    // Load Teams With Zero Scores (distinguishing between unavailable and zero-score members)
     async loadTeamsWithZeroScores() {
         try {
-            const [scoresData, memberDetails, teamsData] = await Promise.all([
-                this.getAggregatedScores(),
+            const [memberDetails, teamsData] = await Promise.all([
                 this.getMemberDetails(),
-                this.getTea
+                this.getTeamsData()
+            ]);
+
+            const lang = window.appUtils.currentLanguage();
+            const teamAnalysis = {};
+            const dateRange = this.getDateRange(this.currentStartDate, this.currentEndDate);
+
+            // Analyze each team's members across the date range
+            for (const [memberId, details] of Object.entries(memberDetails)) {
+                const teamCode = details.teamCode;
+
+                if (!teamAnalysis[teamCode]) {
+                    teamAnalysis[teamCode] = {
+                        totalScore: 0,
+                        zeroScoreMembers: [],
+                        unavailableMembers: [],
+                        activeMembers: []
+                    };
+                }
+
+                let memberTotalScore = 0;
+                let memberUnavailableDays = 0;
+                let memberActiveDays = 0;
+
+                // Check member's status across all dates
+                for (const date of dateRange) {
+                    try {
+                        const { db } = window.appUtils;
+                        const memberDoc = await db.collection('scores')
+                            .doc(date)
+                            .collection(teamCode)
+                            .doc(memberId)
+                            .get();
+
+                        if (memberDoc.exists) {
+                            const data = memberDoc.data();
+                            
+                            if (data.unavailable === true) {
+                                memberUnavailableDays++;
+                            } else {
+                                const effectiveScores = data.reviewedScores || data.scores || {};
+                                const dayScore = window.appUtils.products.reduce(
+                                    (sum, product) => sum + (effectiveScores[product] || 0),
+                                    0
+                                );
+                                memberTotalScore += dayScore;
+                                if (dayScore > 0) {
+                                    memberActiveDays++;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        // Handle missing documents silently
+                    }
+                }
+
+                // Categorize member based on their performance
+                if (memberUnavailableDays === dateRange.length) {
+                    // Member was unavailable for all days in range
+                    teamAnalysis[teamCode].unavailableMembers.push({
+                        name: details.name,
+                        status: 'unavailable-all-days'
+                    });
+                } else if (memberUnavailableDays > 0) {
+                    // Member was unavailable for some days
+                    teamAnalysis[teamCode].unavailableMembers.push({
+                        name: details.name,
+                        status: 'unavailable-some-days',
+                        unavailableDays: memberUnavailableDays,
+                        totalDays: dateRange.length
+                    });
+                } else if (memberTotalScore === 0) {
+                    // Member was available but scored zero
+                    teamAnalysis[teamCode].zeroScoreMembers.push({
+                        name: details.name,
+                        status: 'available-zero-score'
+                    });
+                } else {
+                    // Member was active and scored
+                    teamAnalysis[teamCode].activeMembers.push({
+                        name: details.name,
+                        score: memberTotalScore
+                    });
+                }
+
+                teamAnalysis[teamCode].totalScore += memberTotalScore;
+            }
+
+            // Filter teams that have zero-score available members
+            const teamsWithIssues = Object.entries(teamAnalysis)
+                .filter(([_, analysis]) => analysis.zeroScoreMembers.length > 0)
+                .map(([teamId, analysis]) => ({
+                    name: teamsData[teamId]?.name || teamId,
+                    leader: teamsData[teamId]?.leader || '—',
+                    score: analysis.totalScore,
+                    zeroScoreCount: analysis.zeroScoreMembers.length,
+                    zeroScoreMembers: analysis.zeroScoreMembers,
+                    unavailableMembers: analysis.unavailableMembers,
+                    activeMembers: analysis.activeMembers
+                }))
+                .sort((a, b) => b.score - a.score);
+
+            // Render results
+            const container = document.getElementById('teams-with-zero-scores');
+            if (!container) return;
+
+            if (teamsWithIssues.length === 0) {
+                container.innerHTML = `
+                    <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        ${lang === 'ar' ? 'لا يوجد أعضاء متوفرين بدون انتاجية' : 'No available members with zero scores'}
+                    </p>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="zero-score-table-wrapper">
+                    <table class="zero-score-table">
+                        <thead>
+                            <tr>
+                                <th>${lang === 'ar' ? 'الفريق' : 'Team'}</th>
+                                <th>${lang === 'ar' ? 'القائد' : 'Leader'}</th>
+                                <th>${lang === 'ar' ? 'أعضاء بدون انتاجية' : 'Zero Score Members'}</th>
+                                <th>${lang === 'ar' ? 'أعضاء غير متوفرين' : 'Unavailable Members'}</th>
+                                <th>${lang === 'ar' ? 'أعضاء نشطين' : 'Active Members'}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${teamsWithIssues.map(team => `
+                                <tr>
+                                    <td>${team.name}</td>
+                                    <td class="leader-cell">${team.leader}</td>
+                                    <td class="member-names">
+                                        ${team.zeroScoreMembers.length > 0 ? 
+                                            team.zeroScoreMembers.map(m => `
+                                                <span class="member-badge zero-score">
+                                                    ${m.name} ❌
+                                                </span>
+                                            `).join('') :
+                                            `<span class="no-issues">${lang === 'ar' ? 'لا يوجد' : 'None'}</span>`
+                                        }
+                                    </td>
+                                    <td class="member-names">
+                                        ${team.unavailableMembers.length > 0 ? 
+                                            team.unavailableMembers.map(m => `
+                                                <span class="member-badge unavailable">
+                                                    ${m.name} 
+                                                    ${m.status === 'unavailable-all-days' ? '🚫' : 
+                                                      `⚠️ (${m.unavailableDays}/${m.totalDays})`}
+                                                </span>
+                                            `).join('') :
+                                            `<span class="no-issues">${lang === 'ar' ? 'لا يوجد' : 'None'}</span>`
+                                        }
+                                    </td>
+                                    <td class="member-names">
+                                        ${team.activeMembers.length > 0 ? 
+                                            team.activeMembers.map(m => `
+                                                <span class="member-badge active">
+                                                    ${m.name} ✅ (${m.score})
+                                                </span>
+                                            `).join('') :
+                                            `<span class="no-issues">${lang === 'ar' ? 'لا يوجد' : 'None'}</span>`
+                                        }
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('Error loading teams with zero scores:', error);
+            this.renderErrorLeaderboard('teams-with-zero-scores');
+        }
+    },
+
+    // Update the renderLeaderboard function
+    renderLeaderboard(containerId, data) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const currentLanguage = window.appUtils.currentLanguage();
+
+        if (data.length === 0) {
+            container.innerHTML = `
+            <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                ${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data available'}
+            </p>
+        `;
+            return;
+        }
+
+        // Check if this is a ribbon leaderboard (top-achievers or top-leaders)
+        const isRibbonLeaderboard = containerId === 'top-achievers' || containerId === 'top-leaders';
+
+        if (isRibbonLeaderboard) {
+            container.innerHTML = data.map((item, index) => {
+                const position = index + 1;
+                const trophy = position === 1 ? '🏆' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                const rankClass = position === 1 ? 'rank-1' : position === 2 ? 'rank-2' : position === 3 ? 'rank-3' : 'rank-other';
+                               
+                return `
+                <div class="ribbon-member-card ${rankClass}">
+                    <div class="ribbon-position-badge ${rankClass}">#${position}</div>
+                    ${trophy ? `<div class="ribbon-trophy-icon">${trophy}</div>` : ''}
+                    
+                    <img src="${item.image || ''}" 
+                         class="ribbon-member-image"
+                         onerror="this.src=''; this.style.display='none';">
+                    
+                    <div class="ribbon ribbon-small">
+                        <div class="member-info-container">
+                            <div class="member-name-display">${item.name}</div>
+                            <div class="member-score-display">${item.score}</div>
+                            <div class="member-team-display">${item.team}</div>
+                            ${item.availableMembersCount ? `
+                                <div class="member-detail-display" style="font-size: 0.7em; opacity: 0.8;">
+                                    ${currentLanguage === 'ar' ? 'أعضاء متوفرين' : 'Available'}: ${item.availableMembersCount}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        } else {
+            // Use the original rendering for other leaderboards
+            container.innerHTML = data.map((item, index) => {
+                const trophy = index === 0 ? '🏆' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `
+                <div class="leaderboard-item">
+                    <span class="rank">#${index + 1}</span>
+                    <span class="name">${item.name}</span>                    
+                    <span class="score">${item.score}
+                        ${item.availableMembersCount ? ` (${item.availableMembersCount}${currentLanguage === 'ar' ? ' متوفر' : ' avail'})` : ''}
+                        <span class="trophy">${trophy}</span>
+                    </span>
+                </div>
+            `;
+            }).join('');
+        }
+    },
+
+    // Render error state
+    renderErrorLeaderboard(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const currentLanguage = window.appUtils.currentLanguage();
+        container.innerHTML = `
+            <div style="text-align: center; color: var(--danger-color, #dc3545); padding: 20px;">
+                <p>${currentLanguage === 'ar' ? 'خطأ في تحميل البيانات' : 'Error loading data'}</p>
+                <button onclick="window.modules.leaderboard.refreshLeaderboards()" 
+                        style="background: var(--primary-color); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px;">
+                    ${currentLanguage === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+                </button>
+            </div>
+        `;
+    },
+
+    // Refresh leaderboards
+    async refreshLeaderboards() {
+        // Clear all caches
+        this.memberDetailsCache = null;
+        this.teamsCache = null;
+
+        // Clear date-based caches
+        const dateRange = this.getDateRange(this.currentStartDate, this.currentEndDate);
+        dateRange.forEach(date => {
+            window.appUtils.clearScoresCache?.(date);
+        });
+
+        await this.loadLeaderboards();
+    }
+};
+
+// Register module globally
+window.modules = window.modules || {};
+window.modules.leaderboard = LeaderboardModule;
+
+// Make functions globally accessible
+window.setDateFilter = LeaderboardModule.setDateFilter.bind(LeaderboardModule);
+window.applyDateRange = LeaderboardModule.applyDateRange.bind(LeaderboardModule);
+
+export default LeaderboardModule;
