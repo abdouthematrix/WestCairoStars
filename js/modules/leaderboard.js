@@ -294,6 +294,11 @@ const LeaderboardModule = {
                 const memberId = doc.id;
                 const data = doc.data();
 
+                // Skip if member is unavailable for this date
+                if (data.unavailable === true) {
+                    return;
+                }
+
                 // Initialize member aggregation
                 if (!aggregatedData[memberId]) {
                     aggregatedData[memberId] = {
