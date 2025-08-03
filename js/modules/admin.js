@@ -1,4 +1,4 @@
-﻿//==========================Admin Module - Subcollection Structure==================================//
+//==========================Admin Module - Subcollection Structure==================================//
 
 const AdminModule = {
     // Current review date - defaults to today
@@ -309,8 +309,9 @@ const AdminModule = {
                     <table class="members-table">
                         <thead>
                             <tr>
- <th data-en="Picture" data-ar="الصورة">الصورة</th>
+                                <th data-en="Picture" data-ar="الصورة">الصورة</th>
                                 <th data-en="Name" data-ar="الاسم">الاسم</th>
+                                <th data-en="Unavailable" data-ar="غير متوفر">غير متوفر</th>
                                 <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
                                 <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
                                 <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
@@ -323,7 +324,7 @@ const AdminModule = {
                         <tbody>
                             ${memberRows}
                             ${isAdminTeam && members.length === 0 ? `
-                                <tr><td colspan="8" class="no-members" data-en="Admin team - No members required" data-ar="فريق الإدارة - لا يتطلب أعضاء">فريق الإدارة - لا يتطلب أعضاء</td></tr>
+                                <tr><td colspan="10" class="no-members" data-en="Admin team - No members required" data-ar="فريق الإدارة - لا يتطلب أعضاء">فريق الإدارة - لا يتطلب أعضاء</td></tr>
                             ` : ''}
                         </tbody>
                     </table>
@@ -342,13 +343,18 @@ const AdminModule = {
             const memberScores = scores[memberId] || {};
             const reviewedScores = memberScores.reviewedScores || {};
             const originalScores = memberScores.scores || {};
+            const isUnavailable = memberScores.unavailable || false;
+            
             // Calculate total from reviewed scores
             const total = Object.values(reviewedScores).reduce((sum, score) => {
                 return sum + (parseInt(score) || 0);
             }, 0);
 
+            // Add unavailable styling class
+            const unavailableClass = isUnavailable ? 'member-unavailable' : '';
+
             return `
-            <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''}">
+            <tr id="admin-member-row-${memberId}" class="member-row ${isAdminTeam ? 'admin-team-row' : ''} ${unavailableClass}">
                 <td class="member-photo">
                     ${member.teamMemberImage ?
                     `<img src="${member.teamMemberImage}" alt="${member.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">` :
@@ -361,6 +367,14 @@ const AdminModule = {
                     ` : ''}
                 </td>
                 <td>${member.name}</td>
+                <td class="unavailable-cell">
+                    <input type="checkbox" 
+                           class="unavailable-checkbox" 
+                           ${isUnavailable ? 'checked' : ''}
+                           id="unavailable-${memberId}"
+                           ${isAdminTeam || !isTodayOrYesterday ? 'disabled' : ''}
+                           ${isTodayOrYesterday && !isAdminTeam ? `onchange="autoSaveUnavailable('${teamId}','${memberId}', this.checked)"` : ''}>
+                </td>
                 ${products.map(product => `
                     <td>
                         <input type="number" 
@@ -368,14 +382,14 @@ const AdminModule = {
                                class="score-input" 
                                value="${reviewedScores[product] || ''}" 
                                id="reviewed-${memberId}-${product}"
-                               ${isAdminTeam || !isTodayOrYesterday ? 'disabled' : ''}
+                               ${isAdminTeam || !isTodayOrYesterday || isUnavailable ? 'disabled' : ''}
                                ${isTodayOrYesterday && !isAdminTeam ? `onchange="autoSaveScore('${teamId}','${memberId}', '${product}', this.value)"` : ''}>
                         <div class="original-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
                             Original: ${originalScores[product] || '0'}
                         </div>   
                     </td>
                 `).join('')}
-                <td><strong>${total}</strong></td>
+                <td><strong>${isUnavailable ? 'N/A' : total}</strong></td>
                 <td class="action-btns">
                     ${!isAdminTeam ? `
                         <button class="edit-btn btn-small" onclick="editMemberName('${memberId}', '${member.name}')" data-en="Edit" data-ar="تعديل">تعديل</button>
@@ -387,6 +401,93 @@ const AdminModule = {
             </tr>
         `;
         }).join('');
+    },
+
+    // Auto-save unavailable status using subcollection structure
+    async autoSaveUnavailable(teamId, memberId, isUnavailable) {
+        if (!this.isReviewingTodayOrYesterday()) {
+            alert(window.appUtils.currentLanguage() === 'ar' ?
+                'يمكن تعديل درجات اليوم او امس فقط' :
+                'Can only edit today\'s or yesterday\'s scores');
+            return;
+        }
+
+        const { db } = window.appUtils;
+        const reviewDate = this.getReviewDateString();
+
+        try {
+            // Save to subcollection: scores/{date}/{teamId}/{memberId}
+            const memberScoreRef = db.collection('scores')
+                .doc(reviewDate)
+                .collection(teamId)
+                .doc(memberId);
+
+            // Get current data or create new structure
+            const currentDoc = await memberScoreRef.get();
+            const currentData = currentDoc.exists ? currentDoc.data() : {
+                reviewedScores: {},
+                scores: {},
+                unavailable: false,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Update the unavailable status
+            currentData.unavailable = isUnavailable;
+            currentData.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
+
+            // Save to database
+            await memberScoreRef.set(currentData, { merge: true });
+
+            // Update cache
+            const cacheKey = `${teamId}-${reviewDate}`;
+            if (this.scoresCache.has(cacheKey)) {
+                const cachedScores = this.scoresCache.get(cacheKey);
+                if (!cachedScores[memberId]) {
+                    cachedScores[memberId] = { reviewedScores: {}, scores: {}, unavailable: false };
+                }
+                cachedScores[memberId].unavailable = isUnavailable;
+            }
+
+            // Update UI
+            this.updateMemberRowUnavailableStatus(memberId, isUnavailable);
+
+            // Visual feedback
+            this.showSaveSuccess(memberId);
+
+        } catch (error) {
+            console.error('Error auto-saving unavailable status:', error);
+            alert(window.appUtils.currentLanguage() === 'ar' ?
+                'خطأ في حفظ حالة التوفر' : 'Error saving availability status');
+        }
+    },
+
+    // Update member row unavailable status
+    updateMemberRowUnavailableStatus(memberId, isUnavailable) {
+        const row = document.getElementById(`admin-member-row-${memberId}`);
+        if (!row) return;
+
+        // Toggle unavailable class
+        if (isUnavailable) {
+            row.classList.add('member-unavailable');
+        } else {
+            row.classList.remove('member-unavailable');
+        }
+
+        // Disable/enable score inputs
+        const scoreInputs = row.querySelectorAll('.score-input');
+        scoreInputs.forEach(input => {
+            input.disabled = isUnavailable;
+        });
+
+        // Update total display
+        const totalCell = row.querySelector('td:nth-last-child(2) strong');
+        if (totalCell) {
+            if (isUnavailable) {
+                totalCell.textContent = 'N/A';
+            } else {
+                this.updateMemberRowTotal(memberId);
+            }
+        }
     },
 
     // Auto-save score function using subcollection structure
@@ -415,6 +516,7 @@ const AdminModule = {
             const currentData = currentDoc.exists ? currentDoc.data() : {
                 reviewedScores: {},
                 scores: {},
+                unavailable: false,
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             };
             currentData.reviewedScores = currentData.reviewedScores || {};
@@ -431,7 +533,7 @@ const AdminModule = {
             if (this.scoresCache.has(cacheKey)) {
                 const cachedScores = this.scoresCache.get(cacheKey);
                 if (!cachedScores[memberId]) {
-                    cachedScores[memberId] = { reviewedScores: {}, scores: {} };
+                    cachedScores[memberId] = { reviewedScores: {}, scores: {}, unavailable: false };
                 }
                 cachedScores[memberId].reviewedScores = currentData.reviewedScores || {};
                 cachedScores[memberId].reviewedScores[product] = numScore;
@@ -458,6 +560,13 @@ const AdminModule = {
 
         const totalCell = row.querySelector('td:nth-last-child(2) strong');
         if (totalCell) {
+            // Check if member is unavailable
+            const unavailableCheckbox = document.getElementById(`unavailable-${memberId}`);
+            if (unavailableCheckbox && unavailableCheckbox.checked) {
+                totalCell.textContent = 'N/A';
+                return;
+            }
+
             let newTotal = 0;
             products.forEach(product => {
                 const input = document.getElementById(`reviewed-${memberId}-${product}`);
@@ -819,7 +928,7 @@ const AdminModule = {
                     };
 
                     scoresSnapshot.forEach(scoreDoc => {
-                        // Reset both original scores and reviewed scores
+                        // Reset scores but keep unavailable status
                         batch.update(scoreDoc.ref, {
                             scores: resetScores,
                             reviewedScores: resetScores,
@@ -908,70 +1017,72 @@ const AdminModule = {
             alert(currentLanguage === 'ar' ? 'خطأ في إعادة تعيين درجات الفريق' : 'Error resetting team scores');
         }
     },
+
     // Upload member image function for admin
     async uploadMemberImageAdmin(memberId) {
         const input = document.createElement('input');
-input.type = 'file';
-input.accept = 'image/*';
+        input.type = 'file';
+        input.accept = 'image/*';
 
-input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-    // Check file size (limit to 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-        const currentLanguage = window.appUtils.currentLanguage();
-        alert(currentLanguage === 'ar' ? 'حجم الصورة كبير جداً (الحد الأقصى 2MB)' : 'Image size too large (max 2MB)');
-        return;
-    }
-
-    try {
-        window.appUtils.showLoadingIndicator();
-
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const base64 = reader.result;
-                await saveMemberImageAdmin(memberId, base64);
-            } catch (error) {
-                console.error('Error saving image:', error);
+            // Check file size (limit to 2MB)
+            if (file.size > 2 * 1024 * 1024) {
                 const currentLanguage = window.appUtils.currentLanguage();
-                alert(currentLanguage === 'ar' ? 'خطأ في حفظ الصورة' : 'Error saving image');
+                alert(currentLanguage === 'ar' ? 'حجم الصورة كبير جداً (الحد الأقصى 2MB)' : 'Image size too large (max 2MB)');
+                return;
+            }
+
+            try {
+                window.appUtils.showLoadingIndicator();
+
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    try {
+                        const base64 = reader.result;
+                        await this.saveMemberImageAdmin(memberId, base64);
+                    } catch (error) {
+                        console.error('Error saving image:', error);
+                        const currentLanguage = window.appUtils.currentLanguage();
+                        alert(currentLanguage === 'ar' ? 'خطأ في حفظ الصورة' : 'Error saving image');
+                    }
+                };
+                reader.readAsDataURL(file);
+
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                const currentLanguage = window.appUtils.currentLanguage();
+                alert(currentLanguage === 'ar' ? 'خطأ في رفع الصورة' : 'Error uploading image');
+            } finally {
+                window.appUtils.hideLoadingIndicator();
             }
         };
-        reader.readAsDataURL(file);
 
-    } catch (error) {
-        console.error('Error uploading image:', error);
-        const currentLanguage = window.appUtils.currentLanguage();
-        alert(currentLanguage === 'ar' ? 'خطأ في رفع الصورة' : 'Error uploading image');
-    } finally {
-        window.appUtils.hideLoadingIndicator();
-    }
-};
-
-input.click();
+        input.click();
     },
+
     // Save member image to Firestore
     async saveMemberImageAdmin(memberId, base64Image) {
         const { db } = window.appUtils;
 
-    try {
-        await db.collection('teamMembers').doc(memberId).update({
-            teamMemberImage: base64Image,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        try {
+            await db.collection('teamMembers').doc(memberId).update({
+                teamMemberImage: base64Image,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
 
-        await this.loadAllTeamsForAdmin();
+            await this.loadAllTeamsForAdmin();
 
-        const currentLanguage = window.appUtils.currentLanguage();
-        alert(currentLanguage === 'ar' ? 'تم حفظ الصورة بنجاح' : 'Image saved successfully');
+            const currentLanguage = window.appUtils.currentLanguage();
+            alert(currentLanguage === 'ar' ? 'تم حفظ الصورة بنجاح' : 'Image saved successfully');
 
-    } catch (error) {
-        console.error('Error saving member image:', error);
-        throw error;
+        } catch (error) {
+            console.error('Error saving member image:', error);
+            throw error;
+        }
     }
-}
 };
 
 // Register module globally
@@ -981,6 +1092,8 @@ window.modules.admin = AdminModule;
 // Make functions globally accessible
 window.uploadMemberImageAdmin = AdminModule.uploadMemberImageAdmin.bind(AdminModule);
 window.saveMemberImageAdmin = AdminModule.saveMemberImageAdmin.bind(AdminModule);
+window.autoSaveUnavailable = AdminModule.autoSaveUnavailable.bind(AdminModule);
+
 // Make functions globally accessible for HTML onclick handlers
 window.createNewTeam = AdminModule.createNewTeam.bind(AdminModule);
 window.deleteTeam = AdminModule.deleteTeam.bind(AdminModule);
