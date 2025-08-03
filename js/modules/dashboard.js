@@ -1,4 +1,4 @@
-﻿// Dashboard Module - Optimized for Subcollection Structure
+// Dashboard Module - Optimized for Subcollection Structure
 // Firestore structure: scores/{date}/{teamId}/{memberId}
 
 const DashboardModule = {
@@ -89,17 +89,18 @@ const DashboardModule = {
                 [product]: score
             };
 
-            // Save back to Firestore
+            // Save back to Firestore (preserve unavailable status)
             await memberScoreRef.set({
                 scores: updatedScores,
                 reviewedScores: currentData.reviewedScores || {},
+                unavailable: currentData.unavailable || false,
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                 teamCode: currentTeamCode
             }, { merge: true });
 
             // Update cache
             if (!this.currentScoresCache[memberId]) {
-                this.currentScoresCache[memberId] = { scores: {}, reviewedScores: {} };
+                this.currentScoresCache[memberId] = { scores: {}, reviewedScores: {}, unavailable: false };
             }
             this.currentScoresCache[memberId].scores = updatedScores;
 
@@ -107,6 +108,46 @@ const DashboardModule = {
 
         } catch (error) {
             console.error('Error saving member score:', error);
+            throw error;
+        }
+    },
+
+    // Save member unavailable status
+    async saveMemberUnavailable(memberId, isUnavailable) {
+        const { db } = window.appUtils;
+        const currentTeamCode = window.appUtils.currentTeamCode();
+        const today = window.appUtils.getTodayString();
+
+        try {
+            // Reference to the member's score document in subcollection
+            const memberScoreRef = db.collection('scores')
+                .doc(today)
+                .collection(currentTeamCode)
+                .doc(memberId);
+
+            // Get current data or initialize empty
+            const currentDoc = await memberScoreRef.get();
+            const currentData = currentDoc.exists ? currentDoc.data() : {};
+
+            // Save back to Firestore (preserve existing scores)
+            await memberScoreRef.set({
+                scores: currentData.scores || {},
+                reviewedScores: currentData.reviewedScores || {},
+                unavailable: isUnavailable,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                teamCode: currentTeamCode
+            }, { merge: true });
+
+            // Update cache
+            if (!this.currentScoresCache[memberId]) {
+                this.currentScoresCache[memberId] = { scores: {}, reviewedScores: {}, unavailable: false };
+            }
+            this.currentScoresCache[memberId].unavailable = isUnavailable;
+
+            return true;
+
+        } catch (error) {
+            console.error('Error saving member unavailable status:', error);
             throw error;
         }
     },
@@ -123,7 +164,7 @@ const DashboardModule = {
         if (!teamMembers || teamMembers.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="${products.length + 3}" style="text-align: center; padding: 20px;">
+                    <td colspan="${products.length + 4}" style="text-align: center; padding: 20px;">
                         ${currentLanguage === 'ar' ? 'لا توجد أعضاء' : 'No members found'}
                     </td>
                 </tr>
@@ -137,38 +178,56 @@ const DashboardModule = {
         const dailyScoresMap = await this.loadTodayScores();
 
         teamMembers.forEach(member => {
-            const data = dailyScoresMap[member.id] || { scores: {}, reviewedScores: {} };
+            const data = dailyScoresMap[member.id] || { scores: {}, reviewedScores: {}, unavailable: false };
             const row = document.createElement('tr');
             const regularScores = data.scores || {};
             const reviewedScores = data.reviewedScores || {};
+            const isUnavailable = data.unavailable || false;
             const effectiveScores = window.scoreUtils.getEffectiveScores(data);
-            const total = window.scoreUtils.calculateTotalScore(data);
+            const total = isUnavailable ? 'N/A' : window.scoreUtils.calculateTotalScore(data);
 
             // Check if reviewed scores exist
             const hasReviewedScores = Object.values(reviewedScores).some(score => score > 0);
 
-            row.innerHTML = `
-    <td class="member-photo">
-        ${member.teamMemberImage ?
-                    `<img src="${member.teamMemberImage}" alt="${member.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">` :
-                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">${currentLanguage === 'ar' ? 'لا توجد صورة' : 'No Photo'}</div>`
-                }
-        <button class="upload-image-btn" onclick="window.modules.dashboard.uploadAndSaveMemberImage('${member.id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">
-            ${currentLanguage === 'ar' ? 'رفع صورة' : 'Upload'}
-        </button>
-    </td>
-                <td>${member.name}</td>
-                ${products.map(product => {
-                const regularScore = regularScores[product] || 0;
-                const reviewedScore = reviewedScores[product] || 0;
+            // Add unavailable styling class
+            const unavailableClass = isUnavailable ? 'member-unavailable' : '';
 
-                return `
+            row.className = `member-row ${unavailableClass}`;
+            row.id = `member-row-${member.id}`;
+
+            row.innerHTML = `
+                <td class="member-photo">
+                    ${member.teamMemberImage ?
+                        `<img src="${member.teamMemberImage}" alt="${member.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">` :
+                        `<div style="width: 50px; height: 50px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">${currentLanguage === 'ar' ? 'لا توجد صورة' : 'No Photo'}</div>`
+                    }
+                    <button class="upload-image-btn" onclick="window.modules.dashboard.uploadAndSaveMemberImage('${member.id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">
+                        ${currentLanguage === 'ar' ? 'رفع صورة' : 'Upload'}
+                    </button>
+                </td>
+                <td>${member.name}</td>
+                <td class="unavailable-cell">
+                    <input type="checkbox" 
+                           class="unavailable-checkbox" 
+                           ${isUnavailable ? 'checked' : ''}
+                           id="unavailable-${member.id}"
+                           onchange="window.modules.dashboard.updateMemberUnavailable('${member.id}', this.checked)">
+                    <label for="unavailable-${member.id}" style="font-size: 0.8em; margin-left: 5px;">
+                        ${currentLanguage === 'ar' ? 'غير متوفر' : 'Unavailable'}
+                    </label>
+                </td>
+                ${products.map(product => {
+                    const regularScore = regularScores[product] || 0;
+                    const reviewedScore = reviewedScores[product] || 0;
+
+                    return `
                         <td>
                             <input type="number" 
                                    class="score-input" 
                                    value="${regularScore}"
                                    onchange="window.modules.dashboard.updateMemberScore('${member.id}', '${product}', this.value)"
-                                   min="0">
+                                   min="0"
+                                   ${isUnavailable ? 'disabled' : ''}>
                             ${hasReviewedScores ? `
                                 <div class="reviewed-score" style="font-size: 0.8em; color: #059669; margin-top: 2px;">
                                     ${currentLanguage === 'ar' ? 'تم احتسابه' : 'Reviewed'}: ${reviewedScore}
@@ -176,10 +235,10 @@ const DashboardModule = {
                             ` : ''}
                         </td>
                     `;
-            }).join('')}
+                }).join('')}
                 <td>
                     <strong>${total}</strong>
-                    ${hasReviewedScores ? `
+                    ${hasReviewedScores && !isUnavailable ? `
                         <div style="font-size: 0.8em; color: #059669;">
                             (${currentLanguage === 'ar' ? 'تم احتسابه' : 'Reviewed'})
                         </div>
@@ -192,6 +251,38 @@ const DashboardModule = {
             `;
             tbody.appendChild(row);
         });
+
+        // Update table header to include unavailable column
+        this.updateTableHeader();
+    },
+
+    // Update table header to include unavailable column
+    updateTableHeader() {
+        const thead = document.querySelector('#membersTable').closest('table').querySelector('thead');
+        if (!thead) return;
+
+        const currentLanguage = window.appUtils.currentLanguage();
+        const { products } = window.appUtils;
+
+        thead.innerHTML = `
+            <tr>
+                <th data-en="Picture" data-ar="الصورة">${currentLanguage === 'ar' ? 'الصورة' : 'Picture'}</th>
+                <th data-en="Name" data-ar="الاسم">${currentLanguage === 'ar' ? 'الاسم' : 'Name'}</th>
+                <th data-en="Availability" data-ar="التوفر">${currentLanguage === 'ar' ? 'التوفر' : 'Availability'}</th>
+                ${products.map(product => {
+                    const productNames = {
+                        securedLoan: { en: 'Secured Loan', ar: 'قرض بضمان' },
+                        securedCreditCard: { en: 'Secured Credit Card', ar: 'بطاقة ائتمان بضمان' },
+                        unsecuredLoan: { en: 'Unsecured Loan', ar: 'قرض بدون ضمان' },
+                        unsecuredCreditCard: { en: 'Unsecured Credit Card', ar: 'بطاقة ائتمان بدون ضمان' },
+                        bancassurance: { en: 'Bancassurance', ar: 'التأمين البنكي' }
+                    };
+                    return `<th>${productNames[product][currentLanguage] || product}</th>`;
+                }).join('')}
+                <th data-en="Total" data-ar="المجموع">${currentLanguage === 'ar' ? 'المجموع' : 'Total'}</th>
+                <th data-en="Actions" data-ar="الإجراءات">${currentLanguage === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+            </tr>
+        `;
     },
 
     // Add Member
@@ -282,6 +373,78 @@ const DashboardModule = {
         }
     },
 
+    // Update Member Unavailable Status
+    async updateMemberUnavailable(memberId, isUnavailable) {
+        try {
+            // Save to database
+            await this.saveMemberUnavailable(memberId, isUnavailable);
+
+            // Update local data in team members cache
+            if (this.teamMembersCache) {
+                const member = this.teamMembersCache.find(m => m.id === memberId);
+                if (member) {
+                    member.unavailable = isUnavailable;
+                }
+            }
+
+            // Update UI
+            this.updateMemberRowUnavailableStatus(memberId, isUnavailable);
+
+            // Visual feedback
+            this.showSaveSuccess(memberId);
+
+        } catch (error) {
+            console.error('Error updating unavailable status:', error);
+            const currentLanguage = window.appUtils.currentLanguage();
+            alert(currentLanguage === 'ar' ? 'خطأ في تحديث حالة التوفر' : 'Error updating availability status');
+            
+            // Revert checkbox state
+            const checkbox = document.getElementById(`unavailable-${memberId}`);
+            if (checkbox) {
+                checkbox.checked = !isUnavailable;
+            }
+        }
+    },
+
+    // Update member row unavailable status in UI
+    updateMemberRowUnavailableStatus(memberId, isUnavailable) {
+        const row = document.getElementById(`member-row-${memberId}`);
+        if (!row) return;
+
+        // Toggle unavailable class
+        if (isUnavailable) {
+            row.classList.add('member-unavailable');
+        } else {
+            row.classList.remove('member-unavailable');
+        }
+
+        // Disable/enable score inputs
+        const scoreInputs = row.querySelectorAll('.score-input');
+        scoreInputs.forEach(input => {
+            input.disabled = isUnavailable;
+        });
+
+        // Update total display
+        const totalCell = row.querySelector('td:nth-last-child(2) strong');
+        if (totalCell) {
+            if (isUnavailable) {
+                totalCell.textContent = 'N/A';
+                // Hide reviewed score indicator if unavailable
+                const reviewedDiv = totalCell.nextElementSibling;
+                if (reviewedDiv) {
+                    reviewedDiv.style.display = 'none';
+                }
+            } else {
+                this.updateMemberRowTotal(memberId);
+                // Show reviewed score indicator if available
+                const reviewedDiv = totalCell.nextElementSibling;
+                if (reviewedDiv) {
+                    reviewedDiv.style.display = 'block';
+                }
+            }
+        }
+    },
+
     // Update Member Score (optimized for subcollection structure)
     async updateMemberScore(memberId, product, score) {
         try {
@@ -299,12 +462,54 @@ const DashboardModule = {
                 }
             }
 
-            // Re-render table to show updated scores
-            await this.renderMembersTable();
+            // Update total in UI
+            this.updateMemberRowTotal(memberId);
+
+            // Visual feedback
+            this.showSaveSuccess(memberId);
+
         } catch (error) {
             console.error('Error updating score:', error);
             const currentLanguage = window.appUtils.currentLanguage();
             alert(currentLanguage === 'ar' ? 'خطأ في تحديث النقاط' : 'Error updating score');
+        }
+    },
+
+    // Update member row total display
+    updateMemberRowTotal(memberId) {
+        const { products } = window.appUtils;
+        const row = document.getElementById(`member-row-${memberId}`);
+        if (!row) return;
+
+        const totalCell = row.querySelector('td:nth-last-child(2) strong');
+        if (totalCell) {
+            // Check if member is unavailable
+            const unavailableCheckbox = document.getElementById(`unavailable-${memberId}`);
+            if (unavailableCheckbox && unavailableCheckbox.checked) {
+                totalCell.textContent = 'N/A';
+                return;
+            }
+
+            let newTotal = 0;
+            products.forEach(product => {
+                const input = row.querySelector(`input[onchange*="${product}"]`);
+                if (input && input.value) {
+                    newTotal += parseInt(input.value) || 0;
+                }
+            });
+            totalCell.textContent = newTotal;
+        }
+    },
+
+    // Show visual feedback for successful save
+    showSaveSuccess(memberId) {
+        const row = document.getElementById(`member-row-${memberId}`);
+        if (row) {
+            const originalBg = row.style.background;
+            row.style.background = '#d1fae5';
+            setTimeout(() => {
+                row.style.background = originalBg;
+            }, 1000);
         }
     },
 
@@ -351,6 +556,7 @@ const DashboardModule = {
             window.appUtils.hideLoadingIndicator();
         }
     },
+
     async uploadMemberImage(memberId) {
         const input = document.createElement('input');
         input.type = 'file';
@@ -389,6 +595,7 @@ const DashboardModule = {
             input.click();
         });
     },
+
     async saveMemberImage(memberId, base64Image) {
         const { db } = window.appUtils;
 
@@ -447,5 +654,6 @@ window.addMember = DashboardModule.addMember.bind(DashboardModule);
 window.editMember = DashboardModule.editMember.bind(DashboardModule);
 window.deleteMember = DashboardModule.deleteMember.bind(DashboardModule);
 window.updateMemberScore = DashboardModule.updateMemberScore.bind(DashboardModule);
+window.updateMemberUnavailable = DashboardModule.updateMemberUnavailable.bind(DashboardModule);
 
 export default DashboardModule;
