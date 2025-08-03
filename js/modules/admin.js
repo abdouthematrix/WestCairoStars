@@ -309,11 +309,12 @@ const AdminModule = {
                     <table class="members-table">
                         <thead>
                             <tr>
+ <th data-en="Picture" data-ar="الصورة">الصورة</th>
                                 <th data-en="Name" data-ar="الاسم">الاسم</th>
                                 <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
                                 <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
                                 <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
-                                <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضमانة">بطاقة ائتمان بدون ضمانة</th>
+                                <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضمان">بطاقة ائتمان بدون ضمان</th>
                                 <th data-en="Bancassurance" data-ar="التأمين البنكي">التأمين البنكي</th>
                                 <th data-en="Total" data-ar="المجموع">المجموع</th>
                                 <th data-en="Actions" data-ar="الإجراءات">الإجراءات</th>
