@@ -118,6 +118,122 @@ const AdminModule = {
             this.getReviewDateString() === window.appUtils.getYesterdayString();
     },
 
+    generateQuickNavigation(teams) {
+        const currentLanguage = window.appUtils.currentLanguage();
+
+        let navHtml = `
+        <div class="quick-navigation" id="quick-navigation">
+            <div class="nav-header">
+                <h4 data-en="Quick Navigation" data-ar="التنقل السريع">
+                    <span class="nav-icon">🧭</span> التنقل السريع
+                </h4>
+                <button class="nav-toggle-btn" onclick="toggleQuickNav()" data-en="Hide" data-ar="إخفاء">
+                    <span class="toggle-icon">−</span> إخفاء
+                </button>
+            </div>
+            <div class="nav-content">
+    `;
+
+        // Admin teams section
+        if (teams.admin.length > 0) {
+            navHtml += `
+            <div class="nav-section">
+                <h5 data-en="Admin Teams" data-ar="فرق الإدارة">
+                    <span class="section-icon">👑</span> فرق الإدارة
+                </h5>
+                <div class="nav-buttons-grid">
+        `;
+            teams.admin.forEach(team => {
+                navHtml += `
+                <button class="nav-team-btn admin-team-btn" onclick="scrollToTeam('${team.id}')" data-team-id="${team.id}" title="${team.name || team.id}">
+                    <span class="team-icon">⚙️</span>
+                    <span class="team-name">${team.name || team.id}</span>
+                </button>
+            `;
+            });
+            navHtml += `</div></div>`;
+        }
+
+        // Regular teams section
+        if (teams.regular.length > 0) {
+            navHtml += `
+            <div class="nav-section">
+                <h5 data-en="Teams" data-ar="الفرق">
+                    <span class="section-icon">👥</span> الفرق
+                </h5>
+                <div class="nav-buttons-grid">
+        `;
+            teams.regular.forEach(team => {
+                navHtml += `
+                <button class="nav-team-btn regular-team-btn" onclick="scrollToTeam('${team.id}')" data-team-id="${team.id}" title="${team.name || team.id} ${team.number ? `(${team.number})` : ''}">
+                    <span class="team-number">${team.number || '?'}</span>
+                    <span class="team-name">${team.name || team.id}</span>
+                    ${team.leader ? `<span class="team-leader">👤 ${team.leader}</span>` : ''}
+                </button>
+            `;
+            });
+            navHtml += `</div></div>`;
+        }
+
+        navHtml += `
+                <div class="nav-footer">
+                    <button class="scroll-top-btn" onclick="scrollToTop()" data-en="Back to Top" data-ar="العودة للأعلى">
+                        <span class="scroll-icon">⬆️</span> العودة للأعلى
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+        return navHtml;
+    },
+
+    // 2. ADD SCROLL TO TEAM FUNCTION
+    scrollToTeam(teamId) {
+        toggleQuickNav();
+        const teamElement = document.getElementById(`team-${teamId}`);
+        if (teamElement) {
+            teamElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+                inline: 'nearest'
+            });
+
+            // Add highlight effect
+            teamElement.classList.add('highlight-team');
+            setTimeout(() => {
+                teamElement.classList.remove('highlight-team');
+            }, 2000);
+        }
+    },
+
+    // 3. ADD TOGGLE NAVIGATION FUNCTION
+    toggleQuickNav() {
+        const nav = document.getElementById('quick-navigation');
+        const toggle = nav.querySelector('.nav-toggle-btn');
+        const content = nav.querySelector('.nav-content');
+        const toggleIcon = toggle.querySelector('.toggle-icon');
+        const currentLanguage = window.appUtils.currentLanguage();
+
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            toggle.innerHTML = `<span class="toggle-icon">−</span> ${currentLanguage === 'ar' ? 'إخفاء' : 'Hide'}`;
+            nav.classList.remove('collapsed');
+        } else {
+            content.style.display = 'none';
+            toggle.innerHTML = `<span class="toggle-icon">+</span> ${currentLanguage === 'ar' ? 'إظهار' : 'Show'}`;
+            nav.classList.add('collapsed');
+        }
+    },
+
+    // 4. ADD SCROLL TO TOP FUNCTION
+    scrollToTop() {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    },
+
     // Load all teams with caching
     async loadTeams() {
         if (this.teamsCache) {
@@ -226,8 +342,11 @@ const AdminModule = {
             // Load all teams
             const teams = await this.loadTeams();
 
+            const quickNavHtml = this.generateQuickNavigation(teams);
+
             // Build header HTML
             let html = `
+               ${quickNavHtml}
                 <div class="admin-header">
                     <h2 data-en="Team Management" data-ar="إدارة الفرق">إدارة الفرق</h2>
                     <div class="admin-header-actions">
@@ -280,7 +399,7 @@ const AdminModule = {
         const contextClass = isTodayOrYesterday ? 'today-scores' : 'historical-scores';
 
         return `
-            <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''} ${contextClass}">
+            <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''} ${contextClass}" id="team-${teamId}">
                 <div class="team-header">
                     <div class="team-info">
                         <h3>${team.name || teamId} ${!isAdminTeam && team.number ? `${team.number}` : ''}
@@ -293,6 +412,7 @@ const AdminModule = {
                             <button class="edit-btn btn-small" onclick="editTeamInfo('${teamId}', '${team.name}', '${team.leader || ''}')" data-en="Edit Team" data-ar="تعديل الفريق">تعديل الفريق</button>
                             <button class="edit-btn btn-small" onclick="editTeamLeader('${teamId}', '${team.leader || ''}')" data-en="Edit Leader" data-ar="تعديل القائد">تعديل القائد</button>
                             <button class="edit-btn btn-small" onclick="changeTeamCode('${teamId}', '${team.name}')" data-en="Change Code" data-ar="تغيير الرمز">تغيير الرمز</button>
+                            <button class="edit-btn btn-small" onclick="changeTeamNo('${teamId}')" data-en="Change Number" data-ar="تغيير الرقم">تغيير الرقم</button>
                             <button class="delete-btn btn-small" onclick="deleteTeam('${teamId}', '${team.name}')" data-en="Delete Team" data-ar="حذف الفريق">حذف الفريق</button>
                         ` : `
                             <span class="admin-protected-text" data-en="Admin Team - Protected" data-ar="فريق الإدارة - محمي">فريق الإدارة - محمي</span>
@@ -613,6 +733,9 @@ const AdminModule = {
         const teamCode = prompt(currentLanguage === 'ar' ? 'رمز الفريق (يجب أن يكون فريداً):' : 'Team code (must be unique):');
         if (!teamCode || !teamCode.trim()) return;
 
+        const teamno = prompt(currentLanguage === 'ar' ? 'رقم الفرع:' : 'Team Number:');
+        if (!teamno || !teamno.trim()) return;
+
         const leaderName = prompt(currentLanguage === 'ar' ? 'اسم قائد الفريق:' : 'Team leader name:');
         if (!leaderName || !leaderName.trim()) return;
 
@@ -627,6 +750,7 @@ const AdminModule = {
             // Create new team
             await db.collection('teams').doc(teamCode.trim()).set({
                 name: teamName.trim(),
+                number: teamName.trim(),
                 leader: leaderName.trim(),
                 isAdmin: false,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -874,7 +998,31 @@ const AdminModule = {
             alert(currentLanguage === 'ar' ? 'خطأ في تغيير رمز الفريق' : 'Error changing team code');
         }
     },
+    
+    async changeTeamNo(teamId) {
+        const currentLanguage = window.appUtils.currentLanguage();
+        const { db } = window.appUtils;
 
+        const newNumber = prompt(
+            currentLanguage === 'ar' ? 'تعديل رقم الفريق:' : 'Edit team number:');
+        if (!newNumber) return;
+
+        try {
+            await db.collection('teams').doc(teamId).update({
+                number: newNumber.trim(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            alert(currentLanguage === 'ar' ? 'تم تحديث رقم الفريق بنجاح' : 'Team number updated successfully');
+
+            // Clear cache and reload
+            this.clearAllCaches();
+            await this.loadAllTeamsForAdmin();
+        } catch (error) {
+            console.error('Error updating team number:', error);
+            alert(currentLanguage === 'ar' ? 'خطأ في تحديث رقم الفريق' : 'Error updating team number');
+        }
+    },
     // Reset Functions using subcollection structure
     async resetAllScores() {
         const currentLanguage = window.appUtils.currentLanguage();
@@ -1095,9 +1243,13 @@ window.modules = window.modules || {};
 window.modules.admin = AdminModule;
 
 // Make functions globally accessible
+window.scrollToTeam = AdminModule.scrollToTeam.bind(AdminModule);
+window.toggleQuickNav = AdminModule.toggleQuickNav.bind(AdminModule);
+window.scrollToTop = AdminModule.scrollToTop.bind(AdminModule);
 window.uploadMemberImageAdmin = AdminModule.uploadMemberImageAdmin.bind(AdminModule);
 window.saveMemberImageAdmin = AdminModule.saveMemberImageAdmin.bind(AdminModule);
 window.autoSaveUnavailable = AdminModule.autoSaveUnavailable.bind(AdminModule);
+window.changeTeamNo = AdminModule.changeTeamNo.bind(AdminModule);
 
 // Make functions globally accessible for HTML onclick handlers
 window.createNewTeam = AdminModule.createNewTeam.bind(AdminModule);
