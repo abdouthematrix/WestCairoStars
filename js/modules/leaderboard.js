@@ -565,11 +565,12 @@ const LeaderboardModule = {
             const lang = window.appUtils.currentLanguage();
             const teamScores = {};
 
-            // Step 1: Collect and evaluate scores per team
-            for (const [memberId, details] of Object.entries(memberDetails)) {
-                const teamCode = details.teamCode;
-                const scoreEntry = scoresData[memberId];
+            // Step 1: Collect and evaluate scores per team (only available members)
+            for (const [memberId, scoreEntry] of Object.entries(scoresData)) {
+                const details = memberDetails[memberId];
+                if (!details) continue;
 
+                const teamCode = details.teamCode;
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
                         totalScore: 0,
