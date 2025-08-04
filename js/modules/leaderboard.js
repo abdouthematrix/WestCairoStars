@@ -446,9 +446,10 @@ const LeaderboardModule = {
 
                 if (teamData && availableMembersInTeam > 0) {
                     const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
+                    const membersWithZeroScores = teamScore.members.filter(m => !m.hasActivity).length;
 
-                    // Check if all available members are active
-                    if (activeMembersWithScores === availableMembersInTeam) {
+                    // Check if ALL available members are active (no zero scores allowed)
+                    if (activeMembersWithScores === availableMembersInTeam && membersWithZeroScores === 0) {
                         teams.push({
                             name: teamData.name || teamId,
                             score: teamScore.totalScore,
@@ -511,9 +512,10 @@ const LeaderboardModule = {
 
                 if (teamData?.leader && availableMembersInTeam > 0) {
                     const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
+                    const membersWithZeroScores = teamScore.members.filter(m => !m.hasActivity).length;
 
-                    // Check if all available members are active
-                    if (activeMembersWithScores === availableMembersInTeam) {
+                    // Check if ALL available members are active (no zero scores allowed)
+                    if (activeMembersWithScores === availableMembersInTeam && membersWithZeroScores === 0) {
                         leaders.push({
                             name: teamData.leader,
                             team: teamData.name || teamId,
