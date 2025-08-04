@@ -1,4 +1,4 @@
-// Leaderboard Module - Optimized for Subcollection Structure
+// Leaderboard Module - Optimized for Subcollection Structure with Unavailable Field Support
 // Firestore structure: scores/{date}/{teamId}/{memberId}
 
 const LeaderboardModule = {
@@ -242,7 +242,7 @@ const LeaderboardModule = {
         return this.teamsCache;
     },
 
-    // Get aggregated scores from subcollections (ONLY AVAILABLE MEMBERS)
+    // Get aggregated scores from subcollections with unavailable field support
     async getAggregatedScores() {
         const { db } = window.appUtils;
 
@@ -260,7 +260,6 @@ const LeaderboardModule = {
             membersByTeam[teamCode].push(memberId);
         });
 
-        // This will ONLY contain AVAILABLE members (those not marked unavailable)
         const aggregatedData = {};
 
         // Create all query promises for parallel execution
@@ -289,43 +288,36 @@ const LeaderboardModule = {
         // Execute all queries in parallel
         const results = await Promise.all(queryPromises);
 
-        // Process results - SKIP UNAVAILABLE MEMBERS
+        // Process results
         results.filter(Boolean).forEach(({ date, teamCode, snapshot }) => {
             snapshot.docs.forEach(doc => {
                 const memberId = doc.id;
                 const data = doc.data();
 
-                // Skip if member is unavailable for this date
-                if (data.unavailable === true) {
-                    return;
-                }
-
-                // Skip if member doesn't exist in our member details
-                const memberDetail = memberDetails[memberId];
-                if (!memberDetail) {
-                    return;
-                }
-
-                // Initialize member aggregation (only for available members)
+                // Initialize member aggregation
                 if (!aggregatedData[memberId]) {
                     aggregatedData[memberId] = {
                         memberId,
-                        teamCode: memberDetail.teamCode,
+                        teamCode,
                         totalScores: {},
                         totalReviewedScores: {},
                         activeDays: new Set(),
-                        dates: new Set()
+                        dates: new Set(),
+                        unavailableDays: new Set(),
+                        isUnavailable: false
                     };
-
-                    // Initialize all products to 0
-                    window.appUtils.products.forEach(product => {
-                        aggregatedData[memberId].totalScores[product] = 0;
-                        aggregatedData[memberId].totalReviewedScores[product] = 0;
-                    });
                 }
 
                 // Track this date
                 aggregatedData[memberId].dates.add(date);
+
+                // Check if member is unavailable for this date
+                const isUnavailable = data.unavailable === true;
+                if (isUnavailable) {
+                    aggregatedData[memberId].unavailableDays.add(date);
+                    aggregatedData[memberId].isUnavailable = true;
+                    return; // Skip processing scores for unavailable members
+                }
 
                 // Get scores
                 const memberScores = data.scores || {};
@@ -341,8 +333,11 @@ const LeaderboardModule = {
 
                 // Aggregate scores
                 window.appUtils.products.forEach(product => {
-                    aggregatedData[memberId].totalScores[product] += (memberScores[product] || 0);
-                    aggregatedData[memberId].totalReviewedScores[product] += (memberReviewedScores[product] || 0);
+                    aggregatedData[memberId].totalScores[product] =
+                        (aggregatedData[memberId].totalScores[product] || 0) + (memberScores[product] || 0);
+
+                    aggregatedData[memberId].totalReviewedScores[product] =
+                        (aggregatedData[memberId].totalReviewedScores[product] || 0) + (memberReviewedScores[product] || 0);
                 });
             });
         });
@@ -351,19 +346,21 @@ const LeaderboardModule = {
         Object.values(aggregatedData).forEach(member => {
             member.activeDays = member.activeDays.size;
             member.totalDays = member.dates.size;
+            member.unavailableDays = member.unavailableDays.size;
         });
 
         return aggregatedData;
     },
 
-    // Load Top Achievers (ONLY AVAILABLE MEMBERS)
+    // Load Top Achievers - Updated to exclude unavailable members
     async loadTopAchievers() {
         try {
-            const scoresData = await this.getAggregatedScores(); // Only available members
+            const scoresData = await this.getAggregatedScores();
             const memberDetails = await this.getMemberDetails();
             const teamsData = await this.getTeamsData();
 
             const achievers = Object.values(scoresData)
+                .filter(member => !member.isUnavailable) // Exclude unavailable members
                 .map(member => {
                     const details = memberDetails[member.memberId];
                     if (!details) return null;
@@ -380,7 +377,7 @@ const LeaderboardModule = {
                             name: details.name,
                             score: totalScore,
                             teamCode: details.teamCode,
-                            team: teamData?.name || details.teamCode,
+                            team: teamData.name || details.teamCode,
                             image: details.image,
                             productsCount: productsWithScore,
                             activeDays: member.activeDays
@@ -401,14 +398,14 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Top Teams (ONLY AVAILABLE MEMBERS)
+    // Load Top Teams - Fixed qualification logic
     async loadTopTeams() {
         try {
-            const scoresData = await this.getAggregatedScores(); // Only available members
+            const scoresData = await this.getAggregatedScores();
             const memberDetails = await this.getMemberDetails();
             const teamsData = await this.getTeamsData();
 
-            // Group scores by team (only available members)
+            // Group scores by team
             const teamScores = {};
             Object.values(scoresData).forEach(member => {
                 const details = memberDetails[member.memberId];
@@ -418,8 +415,7 @@ const LeaderboardModule = {
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
                         members: [],
-                        totalScore: 0,
-                        availableMembers: 0
+                        totalScore: 0
                     };
                 }
 
@@ -431,29 +427,43 @@ const LeaderboardModule = {
                 teamScores[teamCode].members.push({
                     ...details,
                     score: memberScore,
-                    hasActivity: memberScore > 0
+                    hasActivity: memberScore > 0,
+                    isUnavailable: member.isUnavailable
                 });
 
-                teamScores[teamCode].totalScore += memberScore;
-                teamScores[teamCode].availableMembers += 1;
+                // Only add score if member is not unavailable
+                if (!member.isUnavailable) {
+                    teamScores[teamCode].totalScore += memberScore;
+                }
             });
 
-            // Process teams (only teams where ALL available members are active)
+            // Get total member counts per team
+            const teamMemberCounts = {};
+            Object.values(memberDetails).forEach(member => {
+                const teamCode = member.teamCode;
+                teamMemberCounts[teamCode] = (teamMemberCounts[teamCode] || 0) + 1;
+            });
+
+            // Process teams - FIXED QUALIFICATION LOGIC
             const teams = [];
             Object.entries(teamScores).forEach(([teamId, teamScore]) => {
                 const teamData = teamsData[teamId];
-                const availableMembersInTeam = teamScore.availableMembers;
+                const totalMembersInTeam = teamMemberCounts[teamId] || 0;
 
-                if (teamData && availableMembersInTeam > 0) {
-                    const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
-                    const membersWithZeroScores = teamScore.members.filter(m => !m.hasActivity).length;
+                if (teamData && totalMembersInTeam > 0) {
+                    const availableMembersWithScores = teamScore.members.filter(m => !m.isUnavailable && m.hasActivity).length;
+                    const unavailableMembers = teamScore.members.filter(m => m.isUnavailable).length;
 
-                    // Check if ALL available members are active (no zero scores allowed)
-                    if (activeMembersWithScores === availableMembersInTeam && membersWithZeroScores === 0) {
+                    // Team qualifies if: available members with scores + unavailable members = total team members
+                    const qualifiedMembers = availableMembersWithScores + unavailableMembers;
+
+                    if (qualifiedMembers === totalMembersInTeam && totalMembersInTeam > 0) {
                         teams.push({
                             name: teamData.name || teamId,
                             score: teamScore.totalScore,
-                            membersCount: availableMembersInTeam
+                            membersCount: totalMembersInTeam,
+                            availableWithScores: availableMembersWithScores,
+                            unavailableCount: unavailableMembers
                         });
                     }
                 }
@@ -468,24 +478,23 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Top Team Leaders (ONLY AVAILABLE MEMBERS)
+    // Load Top Team Leaders - Fixed qualification logic
     async loadTopTeamLeaders() {
         try {
-            const scoresData = await this.getAggregatedScores(); // Only available members
+            const scoresData = await this.getAggregatedScores();
             const memberDetails = await this.getMemberDetails();
             const teamsData = await this.getTeamsData();
 
-            // Group scores by team (only available members)
+            // Group scores by team
             const teamScores = {};
             Object.values(scoresData).forEach(member => {
                 const details = memberDetails[member.memberId];
-                if (!details) return;              
-                const teamCode = details.teamCode;               
+                if (!details) return;
+                const teamCode = details.teamCode;
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
                         members: [],
-                        totalScore: 0,
-                        availableMembers: 0
+                        totalScore: 0
                     };
                 }
 
@@ -497,30 +506,44 @@ const LeaderboardModule = {
                 teamScores[teamCode].members.push({
                     ...details,
                     score: memberScore,
-                    hasActivity: memberScore > 0
+                    hasActivity: memberScore > 0,
+                    isUnavailable: member.isUnavailable
                 });
 
-                teamScores[teamCode].totalScore += memberScore;
-                teamScores[teamCode].availableMembers += 1;
+                // Only add score if member is not unavailable
+                if (!member.isUnavailable) {
+                    teamScores[teamCode].totalScore += memberScore;
+                }
             });
 
-            // Process leaders (only teams where ALL available members are active)
+            // Get total member counts per team
+            const teamMemberCounts = {};
+            Object.values(memberDetails).forEach(member => {
+                const teamCode = member.teamCode;
+                teamMemberCounts[teamCode] = (teamMemberCounts[teamCode] || 0) + 1;
+            });
+
+            // Process leaders - FIXED QUALIFICATION LOGIC
             const leaders = [];
             Object.entries(teamScores).forEach(([teamId, teamScore]) => {
                 const teamData = teamsData[teamId];
-                const availableMembersInTeam = teamScore.availableMembers;
+                const totalMembersInTeam = teamMemberCounts[teamId] || 0;
 
-                if (teamData?.leader && availableMembersInTeam > 0) {
-                    const activeMembersWithScores = teamScore.members.filter(m => m.hasActivity).length;
-                    const membersWithZeroScores = teamScore.members.filter(m => !m.hasActivity).length;
+                if (teamData?.leader && totalMembersInTeam > 0) {
+                    const availableMembersWithScores = teamScore.members.filter(m => !m.isUnavailable && m.hasActivity).length;
+                    const unavailableMembers = teamScore.members.filter(m => m.isUnavailable).length;
 
-                    // Check if ALL available members are active (no zero scores allowed)
-                    if (activeMembersWithScores === availableMembersInTeam && membersWithZeroScores === 0) {
+                    // Team qualifies if: available members with scores + unavailable members = total team members
+                    const qualifiedMembers = availableMembersWithScores + unavailableMembers;
+
+                    if (qualifiedMembers === totalMembersInTeam && totalMembersInTeam > 0) {
                         leaders.push({
                             name: teamData.leader,
                             team: teamData.name || teamId,
                             score: teamScore.totalScore,
-                            membersCount: availableMembersInTeam
+                            membersCount: totalMembersInTeam,
+                            availableWithScores: availableMembersWithScores,
+                            unavailableCount: unavailableMembers
                         });
                     }
                 }
@@ -535,11 +558,11 @@ const LeaderboardModule = {
         }
     },
 
-    // Load Teams With Zero Scores (ONLY AVAILABLE MEMBERS)
+    // Load Teams With Zero Scores - Updated to handle unavailable members
     async loadTeamsWithZeroScores() {
         try {
             const [scoresData, memberDetails, teamsData] = await Promise.all([
-                this.getAggregatedScores(), // Only available members
+                this.getAggregatedScores(),
                 this.getMemberDetails(),
                 this.getTeamsData()
             ]);
@@ -547,12 +570,11 @@ const LeaderboardModule = {
             const lang = window.appUtils.currentLanguage();
             const teamScores = {};
 
-            // Step 1: Collect and evaluate scores per team (only available members from scoresData)
-            Object.entries(scoresData).forEach(([memberId, scoreEntry]) => {
-                const details = memberDetails[memberId];
-                if (!details) return;
-
+            // Step 1: Collect and evaluate scores per team
+            for (const [memberId, details] of Object.entries(memberDetails)) {
                 const teamCode = details.teamCode;
+                const scoreEntry = scoresData[memberId];
+
                 if (!teamScores[teamCode]) {
                     teamScores[teamCode] = {
                         totalScore: 0,
@@ -561,9 +583,7 @@ const LeaderboardModule = {
                     };
                 }
 
-                const isReviewed = !!scoreEntry?.totalReviewedScores && 
-                    Object.values(scoreEntry.totalReviewedScores).some(score => score > 0);
-                
+                const isReviewed = !!scoreEntry?.totalReviewedScores;
                 const effectiveScores = isReviewed
                     ? scoreEntry.totalReviewedScores
                     : scoreEntry?.totalScores ?? {};
@@ -573,24 +593,31 @@ const LeaderboardModule = {
                     0
                 );
 
+                const isUnavailable = scoreEntry?.isUnavailable || false;
+
                 teamScores[teamCode].members.push({
                     ...details,
                     score: memberScore,
-                    isReviewed
+                    isReviewed,
+                    isUnavailable
                 });
 
-                if (memberScore === 0) {
+                // Only count as zero-score if member is available and has zero score
+                if (!isUnavailable && memberScore === 0) {
                     teamScores[teamCode].hasZeroScoreMembers = true;
                 }
 
-                teamScores[teamCode].totalScore += memberScore;
-            });
+                // Only add to total score if member is not unavailable
+                if (!isUnavailable) {
+                    teamScores[teamCode].totalScore += memberScore;
+                }
+            }
 
-            // Step 2: Extract teams with zero-score members (only available members)
+            // Step 2: Extract teams with zero-score members (excluding unavailable)
             const teamsWithZeroScores = Object.entries(teamScores)
                 .filter(([_, team]) => team.hasZeroScoreMembers)
                 .map(([teamId, team]) => {
-                    const zeroMembers = team.members.filter(m => m.score === 0);
+                    const zeroMembers = team.members.filter(m => !m.isUnavailable && m.score === 0);
                     return {
                         name: teamsData[teamId]?.name || teamId,
                         leader: teamsData[teamId]?.leader || '—',
@@ -602,6 +629,7 @@ const LeaderboardModule = {
                         }))
                     };
                 })
+                .filter(team => team.zeroScoreCount > 0) // Only include teams that actually have zero-score available members
                 .sort((a, b) => b.score - a.score);
 
             // Step 3: Render
@@ -611,7 +639,7 @@ const LeaderboardModule = {
             if (teamsWithZeroScores.length === 0) {
                 container.innerHTML = `
             <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                ${lang === 'ar' ? 'لا يوجد أعضاء بدون انتاجية' : 'No zero-score members'}
+                ${lang === 'ar' ? 'لا يوجد أعضاء متاحين بدون انتاجية' : 'No available zero-score members'}
             </p>`;
                 return;
             }
@@ -677,7 +705,7 @@ const LeaderboardModule = {
                 const position = index + 1;
                 const trophy = position === 1 ? '🏆' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
                 const rankClass = position === 1 ? 'rank-1' : position === 2 ? 'rank-2' : position === 3 ? 'rank-3' : 'rank-other';
-                               
+
                 return `
                 <div class="ribbon-member-card ${rankClass}">
                     <div class="ribbon-position-badge ${rankClass}">#${position}</div>
