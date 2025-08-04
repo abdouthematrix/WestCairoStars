@@ -658,7 +658,7 @@ const LeaderboardModule = {
                 <tbody>
                     ${teamsWithZeroScores.map(team => `
                         <tr>
-                            <td>${team.name}</td>
+                            <td class="branch-cell">${team.name}</td>
                             <td class="leader-cell">${team.leader}</td>
                             <td><span class="count-badge">${team.zeroScoreCount}</span></td>
                             <td class="member-names">

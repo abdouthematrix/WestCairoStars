@@ -22,9 +22,9 @@ let teamMembers = [];
 
 // Products configuration
 const products = [
-    'securedLoan',
-    'securedCreditCard',
+    'securedLoan',    
     'unsecuredLoan',
+    'securedCreditCard',
     'unsecuredCreditCard',
     'bancassurance'
 ];

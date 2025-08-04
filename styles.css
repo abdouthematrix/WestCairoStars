@@ -2487,6 +2487,11 @@ html[lang="ar"] .zero-score-table {
     background-color: #f9fafb;
 }
 
+.branch-cell {
+    font-weight: 500;
+    color: #dc2626 !important;
+}
+
 .leader-cell {
     font-weight: 500;
     color: #059669;

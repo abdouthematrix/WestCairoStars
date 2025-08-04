@@ -133,15 +133,17 @@ const AdminModule = {
                 db.collection('teams').where('isAdmin', '==', false).get()
             ]);
 
+            // Helper to convert and sort
+            const sortByNumber = (docs) =>
+                docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).sort((a, b) => (a.number || 0) - (b.number || 0));
+
+
             this.teamsCache = {
-                admin: adminTeamsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })),
-                regular: regularTeamsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
+                admin: sortByNumber(adminTeamsSnapshot.docs),
+                regular: sortByNumber(regularTeamsSnapshot.docs)
             };
 
             return this.teamsCache;
@@ -164,10 +166,12 @@ const AdminModule = {
                 .where('teamCode', '==', teamId)
                 .get();
 
-            const members = membersSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const members = membersSnapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+                .sort((a, b) => (a.uid || '').localeCompare(b.uid || ''));
 
             this.membersCache.set(teamId, members);
             return members;
@@ -279,7 +283,8 @@ const AdminModule = {
             <div class="admin-section ${isAdminTeam ? 'admin-team-section' : ''} ${contextClass}">
                 <div class="team-header">
                     <div class="team-info">
-                        <h3>${team.name || teamId} ${isAdminTeam ? '<span class="admin-badge" data-en="ADMIN" data-ar="إدارة">إدارة</span>' : ''}</h3>
+                        <h3>${team.name || teamId} ${!isAdminTeam && team.number ? `${team.number}` : ''}
+                        ${ isAdminTeam ?'<span class="admin-badge" data-en="ADMIN" data-ar="إدارة">إدارة</span>': ''}</h3>                        
                         <p class="team-code">Code: ${teamId}</p>
                         ${!isAdminTeam && team.leader ? `<p class="team-leader">Leader: ${team.leader}</p>` : ''}
                     </div>
@@ -312,9 +317,9 @@ const AdminModule = {
                                 <th data-en="Picture" data-ar="الصورة">الصورة</th>
                                 <th data-en="Name" data-ar="الاسم">الاسم</th>
                                 <th data-en="Unavailable" data-ar="غير متوفر">غير متوفر</th>
-                                <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>
-                                <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
+                                <th data-en="Secured Loan" data-ar="قرض بضمان">قرض بضمان</th>    
                                 <th data-en="Unsecured Loan" data-ar="قرض بدون ضمان">قرض بدون ضمان</th>
+                                 <th data-en="Secured Credit Card" data-ar="بطاقة ائتمان بضمان">بطاقة ائتمان بضمان</th>
                                 <th data-en="Unsecured Credit Card" data-ar="بطاقة ائتمان بدون ضمان">بطاقة ائتمان بدون ضمان</th>
                                 <th data-en="Bancassurance" data-ar="التأمين البنكي">التأمين البنكي</th>
                                 <th data-en="Total" data-ar="المجموع">المجموع</th>
